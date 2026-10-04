@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Pendências{% endblock %}
+{% block titulo_pagina %}Pendências &amp; Inconsistências{% endblock %}
+{% block subtitulo_pagina %}Sinalização de problemas antes do faturamento{% endblock %}
+
+{% block conteudo %}
+<div class="painel-filtros">
+  <div class="campo">
+    <label>Status</label>
+    <select id="filtro-status">
+      <option value="aberta">Abertas</option>
+      <option value="em_analise">Em análise</option>
+      <option value="resolvida">Resolvidas (aguardando SOP)</option>
+      <option value="confirmada">Confirmadas</option>
+      <option value="">Todas</option>
+    </select>
+  </div>
+  <button class="btn btn-laranja" id="btn-nova-pendencia" type="button">
+    {{ icons.icone('plus') }} Cadastrar Pendência
+  </button>
+  <div class="kpi-destaque">
+    <div class="kpi-label">PENDÊNCIAS LISTADAS</div>
+    <div class="kpi-valor" id="kpi-total">--</div>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Lista de Pendências</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Prontuário</th>
+          <th>Paciente</th>
+          <th>Tipo</th>
+          <th>Unidade</th>
+          <th>Profissional</th>
+          <th>Data Ocorrência</th>
+          <th>Criticidade</th>
+          <th>Descrição</th>
+          <th>Status</th>
+          <th>Aberta em</th>
+          <th>Tempo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-pendencias">
+        <tr><td colspan="12" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal nova pendencia -->
+<div class="modal-fundo" id="modal-nova-pendencia">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-nova-pendencia">{{ icons.icone('x') }}</button>
+    <h3>Cadastrar Pendência</h3>
+    <form id="form-nova-pendencia">
+      <div class="form-grid">
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Número do Prontuário *</label>
+          <input type="text" name="numero_prontuario" id="input-numero-prontuario" required
+                 placeholder="Digite o número exato do prontuário" autocomplete="off">
+          <small class="texto-suave" id="status-busca-prontuario"></small>
+        </div>
+        <div class="campo">
+          <label>Tipo de Pendência *</label>
+          <select name="tipo_pendencia_id" required>
+            <option value="">Selecione</option>
+            {% for t in tipos %}
+            <option value="{{ t.id }}">{{ t.descricao }} ({{ t.criticidade }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label>Unidade da Ocorrência *</label>
+          <select name="unidade_id" required>
+            <option value="">Selecione</option>
+            {% for u in unidades %}
+            <option value="{{ u.id }}">{{ u.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label>Profissional *</label>
+          <input type="text" name="profissional" required placeholder="Nome do profissional envolvido" list="lista-profissionais" autocomplete="off">
+        </div>
+        <div class="campo">
+          <label>Data da Ocorrência *</label>
+          <input type="date" name="data_ocorrencia" required>
+        </div>
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Descrição detalhada *</label>
+          <textarea name="descricao" rows="3" required placeholder="Descreva a inconsistência encontrada"></textarea>
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-nova-pendencia">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar Pendência</button>
+      </div>
+      <datalist id="lista-profissionais">
+        {% for p in profissionais %}
+        <option value="{{ p.nome }}">
+        {% endfor %}
+      </datalist>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/pendencias.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entrar · Sistema de Prontuários HM</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="loading-logo-wrap">
+    <span class="loading-ring"></span>
+    <img class="loading-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}"
+         alt="Carregando" onerror="this.style.opacity=0.15">
+  </div>
+  <p class="loading-texto">Carregando...</p>
+</div>
+
+<div class="pagina-login">
+  <div class="login-card">
+    <img class="login-logo" src="{{ url_for('static', filename='img/logo-hm-sesa-nova.png') }}"
+         alt="Logo Hospital Municipal" onerror="this.style.display='none'">
+
+    <h1>Controle de Prontuários Físicos</h1>
+    <p class="login-subtitulo">Fluxo SOP → Contas Médicas → Faturamento</p>
+
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% if mensagens %}
+        {% for categoria, msg in mensagens %}
+          <div class="mensagem-flash">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('login') }}" data-nav-loading style="width:100%;">
+      <div class="campo">
+        <label for="login">Usuário</label>
+        <input type="text" id="login" name="login" required autofocus placeholder="seu.login">
+      </div>
+      <div class="campo">
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" name="senha" required placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn btn-primario">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

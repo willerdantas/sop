@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Profissionais{% endblock %}
+{% block titulo_pagina %}Profissionais{% endblock %}
+{% block subtitulo_pagina %}Cadastro de médicos, enfermeiros e demais profissionais{% endblock %}
+
+{% block conteudo %}
+<div class="flex-entre mb-16">
+  <p class="texto-suave">Cadastre os profissionais que podem ser referenciados nas pendências.</p>
+  <button class="btn btn-laranja" id="btn-novo-profissional" type="button">
+    {{ icons.icone('plus') }} Novo Profissional
+  </button>
+</div>
+
+<div class="card-branco">
+  <h3>Profissionais cadastrados</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Categoria</th>
+          <th>Conselho</th>
+          <th>Contato</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-profissionais">
+        <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-fundo" id="modal-profissional">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-profissional">{{ icons.icone('x') }}</button>
+    <h3 id="titulo-modal-profissional">Novo Profissional</h3>
+    <form id="form-profissional">
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Nome *</label>
+          <input type="text" name="nome" required>
+        </div>
+        <div class="campo">
+          <label>Categoria *</label>
+          <select name="categoria" required>
+            <option value="">Selecione</option>
+            <option value="Medico">Médico</option>
+            <option value="Enfermeiro">Enfermeiro</option>
+            <option value="Tecnico de Enfermagem">Técnico de Enfermagem</option>
+            <option value="Fisioterapeuta">Fisioterapeuta</option>
+            <option value="Nutricionista">Nutricionista</option>
+            <option value="Farmaceutico">Farmacêutico</option>
+            <option value="Psicologo">Psicólogo</option>
+            <option value="Assistente Social">Assistente Social</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label>Conselho</label>
+          <select name="conselho">
+            <option value="">Selecione</option>
+            <option value="CRM">CRM</option>
+            <option value="COREN">COREN</option>
+            <option value="CREFITO">CREFITO</option>
+            <option value="CRN">CRN</option>
+            <option value="CRF">CRF</option>
+            <option value="CRP">CRP</option>
+            <option value="CRESS">CRESS</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label>Número do Conselho</label>
+          <input type="text" name="numero_conselho" placeholder="Ex: 123456">
+        </div>
+        <div class="campo">
+          <label>UF do Conselho</label>
+          <input type="text" name="uf_conselho" maxlength="2" placeholder="Ex: SP" style="text-transform:uppercase;">
+        </div>
+        <div class="campo">
+          <label>Telefone</label>
+          <input type="text" name="telefone" placeholder="(00) 00000-0000">
+        </div>
+        <div class="campo">
+          <label>E-mail</label>
+          <input type="email" name="email">
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-profissional">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/profissionais.js') }}"></script>
+{% endblock %}

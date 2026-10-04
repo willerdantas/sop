@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Análise de Prontuário{% endblock %}
+{% block titulo_pagina %}Análise de Prontuário{% endblock %}
+{% block subtitulo_pagina %}Nº {{ prontuario.numero_prontuario }} · {{ prontuario.paciente_nome }}{% endblock %}
+
+{% block conteudo %}
+{% if usuario_perfil == 'operador' %}
+<a href="{{ url_for('unidade') }}" class="btn btn-ghost btn-sm" data-nav style="margin-bottom:16px; display:inline-flex;">
+  Voltar para a Unidade
+</a>
+{% else %}
+<a href="{{ url_for('sop') }}" class="btn btn-ghost btn-sm" data-nav style="margin-bottom:16px; display:inline-flex;">
+  Voltar para o SOP
+</a>
+{% endif %}
+
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Dados do Prontuário</h3>
+    <div class="acoes-linha">
+      {% if usuario_perfil == 'operador' %}
+      <button class="btn btn-primario btn-sm" id="btn-enviar-sop">Enviar p/ SOP</button>
+      {% else %}
+      <button class="btn btn-primario btn-sm" id="btn-enviar-contas">Enviar p/ Contas Médicas</button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="form-grid mt-16">
+    <div class="info-item">
+      <label>Nº Internação</label>
+      <span>{{ isn_internacao or "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>Nº Prontuário</label>
+      <span>{{ prontuario.numero_prontuario }}</span>
+    </div>
+    <div class="info-item">
+      <label>Paciente</label>
+      <span>{{ prontuario.paciente_nome }}</span>
+    </div>
+    <div class="info-item">
+      <label>Matrícula</label>
+      <span>{{ prontuario.paciente_matricula or "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>Unidade de Origem</label>
+      <span>{{ prontuario.unidade_nome or "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>Status Atual</label>
+      <span>{{ status_label.get(prontuario.status_atual, prontuario.status_atual) }}</span>
+    </div>
+    <div class="info-item">
+      <label>Prioridade</label>
+      <span>{{ "Urgente" if prontuario.prioridade == "urgente" else "Normal" }}</span>
+    </div>
+    <div class="info-item">
+      <label>Data de Internação</label>
+      <span>{{ prontuario.data_internacao or "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>Data de Alta</label>
+      <span>{{ prontuario.data_alta or "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>Localização Física</label>
+      <span>{{ prontuario.localizacao_fisica or "-" }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Histórico de Internação</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Clínica</th>
+          <th>Enfermaria</th>
+          <th>Leito</th>
+          <th>Data Internação</th>
+          <th>Data Alta</th>
+          <th>Dias de Clínica</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in historico_leitos %}
+        <tr>
+          <td>{{ h.dsc_clinica or "-" }}</td>
+          <td>{{ h.dsc_enfermaria or "-" }}</td>
+          <td>{{ h.dsc_leito or "-" }}</td>
+          <td>{{ h.dat_internacao or "-" }}</td>
+          <td>{{ h.dat_alta or "-" }}</td>
+          <td>{{ h.dias_clinica }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="vazio-estado">Sem histórico de internação disponível para este prontuário.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Pendências do Prontuário</h3>
+    <button class="btn btn-laranja btn-sm" id="btn-nova-pendencia" type="button">
+      {{ icons.icone('plus') }} Registrar Pendência
+    </button>
+  </div>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Unidade</th>
+          <th>Profissional</th>
+          <th>Data Ocorrência</th>
+          <th>Criticidade</th>
+          <th>Descrição</th>
+          <th>Status</th>
+          <th>Aberta em</th>
+          <th>Tempo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-pendencias-analise">
+        <tr><td colspan="10" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Histórico de Movimentação</h3>
+  <div id="conteudo-historico" class="texto-suave" style="font-size:13px;">Carregando...</div>
+</div>
+
+<!-- Modal nova pendencia -->
+<div class="modal-fundo" id="modal-nova-pendencia">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-nova-pendencia">{{ icons.icone('x') }}</button>
+    <h3>Registrar Pendência</h3>
+    <form id="form-nova-pendencia">
+      <div class="form-grid">
+        <div class="campo">
+          <label>Tipo de Pendência *</label>
+          <select name="tipo_pendencia_id" required>
+            <option value="">Selecione</option>
+            {% for t in tipos %}
+            <option value="{{ t.id }}">{{ t.descricao }} ({{ t.criticidade }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label>Unidade da Ocorrência *</label>
+          <select name="unidade_id" required>
+            <option value="">Selecione</option>
+            {% for u in unidades_pendencia %}
+            <option value="{{ u.id }}" {{ "selected" if u.id == prontuario.unidade_id }}>{{ u.nome }}</option>
+            {% endfor %}
+          </select>
+          {% if historico_leitos %}
+          <small class="texto-suave">Unidades do histórico de internação, mais as unidades locais cadastradas.</small>
+          {% endif %}
+        </div>
+        <div class="campo">
+          <label>Profissional *</label>
+          <input type="text" name="profissional" required placeholder="Nome do profissional envolvido" list="lista-profissionais" autocomplete="off">
+        </div>
+        <div class="campo">
+          <label>Data da Ocorrência *</label>
+          <input type="date" name="data_ocorrencia" required
+                 {% if min_data_ocorrencia %}min="{{ min_data_ocorrencia }}"{% endif %}
+                 {% if max_data_ocorrencia %}max="{{ max_data_ocorrencia }}"{% endif %}>
+          {% if historico_leitos %}
+          <small class="texto-suave">Deve estar dentro do período registrado no histórico de internação.</small>
+          {% endif %}
+        </div>
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Descrição detalhada *</label>
+          <textarea name="descricao" rows="3" required placeholder="Descreva a inconsistência encontrada"></textarea>
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-nova-pendencia">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar Pendência</button>
+      </div>
+      <datalist id="lista-profissionais">
+        {% for p in profissionais %}
+        <option value="{{ p.nome }}">
+        {% endfor %}
+      </datalist>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+  const PRONTUARIO_ID = {{ prontuario.id }};
+  const USUARIO_PERFIL = {{ usuario_perfil | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/analise.js') }}"></script>
+{% endblock %}

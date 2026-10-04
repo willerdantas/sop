@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Unidade{% endblock %}
+{% block titulo_pagina %}Unidade · Prontuários na Origem{% endblock %}
+{% block subtitulo_pagina %}Prontuários cadastrados aguardando envio ao SOP{% endblock %}
+
+{% block conteudo %}
+<div class="painel-filtros">
+  <div class="campo">
+    <label>Nome do Paciente</label>
+    <input type="text" id="filtro-nome" placeholder="Buscar por nome">
+  </div>
+  <div class="campo">
+    <label>Nº Prontuário</label>
+    <input type="text" id="filtro-numero" placeholder="Buscar por número">
+  </div>
+  <div class="campo">
+    <label>Data Início</label>
+    <input type="date" id="filtro-data-inicio">
+  </div>
+  <div class="campo">
+    <label>Data Fim</label>
+    <input type="date" id="filtro-data-fim">
+  </div>
+  <div class="kpi-destaque">
+    <div class="kpi-label">NA UNIDADE AGORA</div>
+    <div class="kpi-valor" id="kpi-total-unidade">--</div>
+  </div>
+</div>
+
+<div class="linha-kpis">
+  <div class="kpi-card verde">
+    <div class="kpi-num" id="kpi-sem-pendencia">--</div>
+    <div class="kpi-desc">Sem pendência registrada</div>
+  </div>
+  <div class="kpi-card laranja">
+    <div class="kpi-num" id="kpi-com-pendencia">--</div>
+    <div class="kpi-desc">Com pendência aberta</div>
+  </div>
+  <div class="kpi-card ciano">
+    <div class="kpi-num" id="kpi-urgentes">--</div>
+    <div class="kpi-desc">Prioridade urgente</div>
+  </div>
+</div>
+
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Pendências da Unidade</h3>
+    <span class="texto-suave" id="contador-pendencias-unidade">Carregando...</span>
+  </div>
+  <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
+    Pendências registradas pelo SOP para esta unidade, mesmo que o prontuário já tenha avançado no fluxo.
+  </p>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Tipo</th>
+          <th>Profissional</th>
+          <th>Data Ocorrência</th>
+          <th>Criticidade</th>
+          <th>Descrição</th>
+          <th>Status</th>
+          <th>Tempo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-pendencias-unidade">
+        <tr><td colspan="10" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Prontuários na Unidade</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade de Origem</th>
+          <th>Prioridade</th>
+          <th>Localização Física</th>
+          <th>Pendências</th>
+          <th>Atualizado em</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-unidade">
+        <tr><td colspan="8" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/unidade.js') }}"></script>
+{% endblock %}

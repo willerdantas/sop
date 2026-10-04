@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block titulo %}Sistema de Prontuários{% endblock %} · HM</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% block head_extra %}{% endblock %}
+</head>
+<body>
+{% import "_icons.html" as icons %}
+
+<!-- Overlay de carregamento / transicao entre paginas -->
+<div id="loading-overlay">
+  <div class="loading-logo-wrap">
+    <span class="loading-ring"></span>
+    <img class="loading-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}"
+         alt="Carregando" onerror="this.style.opacity=0.15">
+  </div>
+  <p class="loading-texto">Carregando...</p>
+</div>
+
+<div class="app-shell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-topo">
+      <button class="sidebar-toggle" type="button" aria-label="Expandir menu">
+        {{ icons.icone('menu') }}
+      </button>
+      <span class="sidebar-marca">HM · Prontuários</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      {% if 'dashboard' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='dashboard' }}" href="{{ url_for('dashboard') }}" data-nav>
+        {{ icons.icone('home') }} <span>Início</span>
+      </a>
+      {% endif %}
+      {% if 'unidade' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='unidade' }}" href="{{ url_for('unidade') }}" data-nav>
+        {{ icons.icone('building') }} <span>Unidade</span>
+      </a>
+      {% endif %}
+      {% if 'sop' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='sop' }}" href="{{ url_for('sop') }}" data-nav>
+        {{ icons.icone('archive') }} <span>SOP</span>
+      </a>
+      {% endif %}
+      {% if 'contas_medicas' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='contas_medicas' }}" href="{{ url_for('contas_medicas') }}" data-nav>
+        {{ icons.icone('file-check') }} <span>Contas Médicas</span>
+      </a>
+      {% endif %}
+      {% if 'pendencias' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='pendencias' }}" href="{{ url_for('pendencias') }}" data-nav>
+        {{ icons.icone('alert') }} <span>Pendências</span>
+      </a>
+      {% endif %}
+      {% if 'painel' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='painel' }}" href="{{ url_for('painel') }}" data-nav>
+        {{ icons.icone('activity') }} <span>Painel Tempo Real</span>
+      </a>
+      {% endif %}
+      {% if 'clinicas' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='clinicas' }}" href="{{ url_for('clinicas') }}" data-nav>
+        {{ icons.icone('search') }} <span>Clínicas</span>
+      </a>
+      {% endif %}
+      {% if 'profissionais' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='profissionais' }}" href="{{ url_for('profissionais') }}" data-nav>
+        {{ icons.icone('id-card') }} <span>Profissionais</span>
+      </a>
+      {% endif %}
+      {% if usuario_perfil == 'admin' %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='usuarios' }}" href="{{ url_for('usuarios') }}" data-nav>
+        {{ icons.icone('users') }} <span>Usuários</span>
+      </a>
+      <a class="sidebar-item {{ 'ativo' if active_page=='perfis' }}" href="{{ url_for('perfis') }}" data-nav>
+        {{ icons.icone('check') }} <span>Perfis</span>
+      </a>
+      {% endif %}
+    </nav>
+
+    <div class="sidebar-rodape">
+      <a class="sidebar-item" href="{{ url_for('logout') }}">
+        {{ icons.icone('logout') }} <span>Sair</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- CONTEUDO -->
+  <div class="conteudo">
+    <header class="topo-pagina">
+      <div class="titulo-pagina">
+        <h1>{% block titulo_pagina %}{% endblock %}</h1>
+        <span class="subtitulo">{% block subtitulo_pagina %}{% endblock %}</span>
+      </div>
+      <div class="topo-acoes">
+        <div class="usuario-chip" title="Clique para sair">
+          <span class="avatar">{{ (usuario_nome or "U")[0]|upper }}</span>
+          <span>{{ usuario_nome }}</span>
+        </div>
+        <img class="topo-logo" src="{{ url_for('static', filename='img/logo-hm-sesa-nova.png') }}"
+             alt="Logo Hospital Municipal" onerror="this.style.display='none'">
+      </div>
+    </header>
+
+    <main class="area-pagina">
+      {% with mensagens = get_flashed_messages(with_categories=true) %}
+        {% if mensagens %}
+          {% for categoria, msg in mensagens %}
+            <div class="mensagem-flash {{ 'sucesso' if categoria=='sucesso' else '' }}">{{ msg }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% block conteudo %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts_extra %}{% endblock %}
+</body>
+</html>

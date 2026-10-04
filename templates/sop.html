@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}SOP{% endblock %}
+{% block titulo_pagina %}SOP · Serviço de Organização de Prontuários{% endblock %}
+{% block subtitulo_pagina %}Recebimento, conferência e envio para Contas Médicas{% endblock %}
+
+{% block conteudo %}
+<div class="painel-filtros">
+  <div class="campo">
+    <label>Nome do Paciente</label>
+    <input type="text" id="filtro-nome" placeholder="Buscar por nome">
+  </div>
+  <div class="campo">
+    <label>Nº Prontuário</label>
+    <input type="text" id="filtro-numero" placeholder="Buscar por número">
+  </div>
+  <div class="campo">
+    <label>Data Início</label>
+    <input type="date" id="filtro-data-inicio">
+  </div>
+  <div class="campo">
+    <label>Data Fim</label>
+    <input type="date" id="filtro-data-fim">
+  </div>
+  <button class="btn btn-laranja" id="btn-novo-prontuario" type="button">
+    {{ icons.icone('plus') }} Novo Prontuário
+  </button>
+  <div class="kpi-destaque">
+    <div class="kpi-label">NO SOP AGORA</div>
+    <div class="kpi-valor" id="kpi-total-sop">--</div>
+  </div>
+</div>
+
+<div class="linha-kpis">
+  <div class="kpi-card verde">
+    <div class="kpi-num" id="kpi-sem-pendencia">--</div>
+    <div class="kpi-desc">Prontos para Contas Médicas</div>
+  </div>
+  <div class="kpi-card laranja">
+    <div class="kpi-num" id="kpi-com-pendencia">--</div>
+    <div class="kpi-desc">Com pendência aberta</div>
+  </div>
+  <div class="kpi-card ciano">
+    <div class="kpi-num" id="kpi-urgentes">--</div>
+    <div class="kpi-desc">Prioridade urgente</div>
+  </div>
+</div>
+
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Altas</h3>
+    <span class="texto-suave" id="contador-altas">Carregando...</span>
+  </div>
+  <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
+    Altas recebidas do sistema hospitalar (Residência, Outro hospital ou Óbito) ainda não registradas no fluxo.
+  </p>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Internação</th>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade</th>
+          <th>Internação</th>
+          <th>Alta</th>
+          <th>Destino</th>
+          <th>Tempo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-altas">
+        <tr><td colspan="9" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="flex-entre mt-16" id="paginacao-altas" style="display:none;">
+    <button class="btn btn-outline btn-sm" id="btn-altas-anterior" type="button">Anterior</button>
+    <span class="texto-suave" id="altas-pagina-info">Página 1 de 1</span>
+    <button class="btn btn-outline btn-sm" id="btn-altas-proxima" type="button">Próxima</button>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Prontuários no SOP</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade de Origem</th>
+          <th>Prioridade</th>
+          <th>Localização Física</th>
+          <th>Pendências</th>
+          <th>Atualizado em</th>
+          <th>Tempo no SOP</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-sop">
+        <tr><td colspan="9" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Prontuários Enviados para Contas Médicas</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade de Origem</th>
+          <th>Pendências</th>
+          <th>Enviado em</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-enviados-contas">
+        <tr><td colspan="5" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal novo prontuario -->
+<div class="modal-fundo" id="modal-novo-prontuario">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-novo-prontuario">{{ icons.icone('x') }}</button>
+    <h3>Cadastrar Prontuário</h3>
+    <form id="form-novo-prontuario">
+      <div class="form-grid">
+        <div class="campo">
+          <label>Número do Prontuário *</label>
+          <input type="text" name="numero_prontuario" required>
+        </div>
+        <div class="campo">
+          <label>Nome do Paciente *</label>
+          <input type="text" name="paciente_nome" required>
+        </div>
+        <div class="campo">
+          <label>Matrícula do Paciente</label>
+          <input type="text" name="paciente_matricula">
+        </div>
+        <div class="campo">
+          <label>Unidade de Origem *</label>
+          <select name="unidade_id" required>
+            <option value="">Selecione</option>
+            {% for u in unidades %}
+            <option value="{{ u.id }}">{{ u.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label>Data de Internação</label>
+          <input type="date" name="data_internacao">
+        </div>
+        <div class="campo">
+          <label>Data de Alta</label>
+          <input type="date" name="data_alta">
+        </div>
+        <div class="campo">
+          <label>Prioridade</label>
+          <select name="prioridade">
+            <option value="normal">Normal</option>
+            <option value="urgente">Urgente</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label>Localização Física</label>
+          <input type="text" name="localizacao_fisica" placeholder="Ex: Armário 3, prateleira B">
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-novo-prontuario">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+<!-- Modal registrar alta no fluxo -->
+<div class="modal-fundo" id="modal-registrar-alta">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-registrar-alta">{{ icons.icone('x') }}</button>
+    <h3>Registrar Prontuário no Fluxo</h3>
+    <div class="form-grid" style="margin-bottom:16px;">
+      <div class="info-item">
+        <label>Paciente</label>
+        <span id="alta-paciente-nome">-</span>
+      </div>
+      <div class="info-item">
+        <label>Unidade</label>
+        <span id="alta-unidade-nome">-</span>
+      </div>
+      <div class="info-item">
+        <label>Internação</label>
+        <span id="alta-data-internacao">-</span>
+      </div>
+      <div class="info-item">
+        <label>Alta</label>
+        <span id="alta-data-alta">-</span>
+      </div>
+      <div class="info-item">
+        <label>Nº Prontuário</label>
+        <span id="alta-numero-prontuario">-</span>
+      </div>
+      <div class="info-item">
+        <label>Destino</label>
+        <span id="alta-destino">-</span>
+      </div>
+    </div>
+    <form id="form-registrar-alta">
+      <input type="hidden" name="isn_internacao_leito">
+      <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="campo">
+          <label>Prioridade</label>
+          <select name="prioridade">
+            <option value="normal">Normal</option>
+            <option value="urgente">Urgente</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label>Localização Física</label>
+          <input type="text" name="localizacao_fisica" placeholder="Ex: Armário 3, prateleira B">
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-registrar-alta">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Registrar no Fluxo</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/sop.js') }}"></script>
+{% endblock %}

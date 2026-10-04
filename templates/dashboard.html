@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Início{% endblock %}
+{% block titulo_pagina %}Painel Inicial{% endblock %}
+{% block subtitulo_pagina %}Sistema de Fluxo e Controle de Prontuários Físicos{% endblock %}
+
+{% block conteudo %}
+<div class="hero-dashboard">
+  <h2>MÓDULOS DO SISTEMA</h2>
+  <div class="grid-cards-menu">
+
+    {% if 'unidade' in paginas_permitidas %}
+    <a class="card-menu" href="{{ url_for('unidade') }}" data-nav>
+      <span class="icone-card">{{ icons.icone('building') }}</span>
+      <span>Unidade · Prontuários e Pendências</span>
+    </a>
+    {% endif %}
+
+    {% if 'sop' in paginas_permitidas %}
+    <a class="card-menu" href="{{ url_for('sop') }}" data-nav>
+      <span class="icone-card">{{ icons.icone('archive') }}</span>
+      <span>SOP · Organização de Prontuários</span>
+    </a>
+    {% endif %}
+
+    {% if 'contas_medicas' in paginas_permitidas %}
+    <a class="card-menu" href="{{ url_for('contas_medicas') }}" data-nav>
+      <span class="icone-card">{{ icons.icone('file-check') }}</span>
+      <span>Contas Médicas</span>
+    </a>
+    {% endif %}
+
+    {% if 'pendencias' in paginas_permitidas %}
+    <a class="card-menu" href="{{ url_for('pendencias') }}" data-nav>
+      <span class="icone-card">{{ icons.icone('alert') }}</span>
+      <span>Pendências &amp; Inconsistências</span>
+    </a>
+    {% endif %}
+
+    {% if 'painel' in paginas_permitidas %}
+    <a class="card-menu" href="{{ url_for('painel') }}" data-nav>
+      <span class="icone-card">{{ icons.icone('activity') }}</span>
+      <span>Painel em Tempo Real</span>
+    </a>
+    {% endif %}
+
+    {% if 'clinicas' in paginas_permitidas %}
+    <a class="card-menu" href="{{ url_for('clinicas') }}" data-nav>
+      <span class="icone-card">{{ icons.icone('search') }}</span>
+      <span>Clínicas</span>
+    </a>
+    {% endif %}
+
+    {% if 'profissionais' in paginas_permitidas %}
+    <a class="card-menu" href="{{ url_for('profissionais') }}" data-nav>
+      <span class="icone-card">{{ icons.icone('id-card') }}</span>
+      <span>Profissionais</span>
+    </a>
+    {% endif %}
+
+    {% if usuario_perfil == 'admin' %}
+    <a class="card-menu" href="{{ url_for('usuarios') }}" data-nav>
+      <span class="icone-card">{{ icons.icone('users') }}</span>
+      <span>Usuários do Sistema</span>
+    </a>
+    <a class="card-menu" href="{{ url_for('perfis') }}" data-nav>
+      <span class="icone-card">{{ icons.icone('check') }}</span>
+      <span>Perfis de Acesso</span>
+    </a>
+    {% endif %}
+
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Como funciona o fluxo</h3>
+  <p class="texto-suave" style="line-height:1.7; font-size: 13.5px;">
+    O prontuário é cadastrado na <strong>Unidade</strong> de origem, segue para o
+    <strong>SOP</strong> para organização e conferência, é encaminhado para
+    <strong>Contas Médicas</strong> e só avança para <strong>Pronto para Faturamento</strong>
+    quando não existem pendências abertas. O <strong>Painel em Tempo Real</strong> mostra
+    a posição de cada prontuário nesse fluxo a qualquer momento.
+  </p>
+</div>
+{% endblock %}

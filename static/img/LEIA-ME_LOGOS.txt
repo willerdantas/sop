@@ -1,0 +1,19 @@
+Coloque aqui, dentro de static/img/, os dois arquivos de logo com
+EXATAMENTE estes nomes (o sistema ja referencia esses caminhos em
+todas as paginas):
+
+  logo-hm-nova.png          -> usada na animacao de carregamento
+                                (transicao entre paginas)
+
+  logo-hm-sesa-nova.png     -> usada centralizada na tela de login
+                                e no canto superior direito do
+                                cabecalho nas demais paginas
+
+Dica: se os arquivos originais tiverem espacos/parenteses no nome
+(ex: "LOGO HM - NOVA (1).png"), apenas renomeie-os para os nomes
+acima antes de colocar nesta pasta - nao é necessario editar nenhum
+HTML ou CSS.
+
+Formato recomendado: PNG com fundo transparente, altura minima de
+200px para boa nitidez tanto no login (logo grande) quanto no
+cabecalho (logo pequena).

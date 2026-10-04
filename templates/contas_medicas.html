@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Contas Médicas{% endblock %}
+{% block titulo_pagina %}Contas Médicas{% endblock %}
+{% block subtitulo_pagina %}Recebimento, conferência, faturamento e auditoria{% endblock %}
+
+{% block conteudo %}
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Prontuários Enviados pelo SOP</h3>
+    <span class="texto-suave" id="contador-aguardando">Carregando...</span>
+  </div>
+  <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
+    Aguardando confirmação de entrega física do prontuário.
+  </p>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade</th>
+          <th>Pendências</th>
+          <th>Enviado em</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-aguardando">
+        <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Prontuários em Contas Médicas</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade</th>
+          <th>Pendências</th>
+          <th>Recebido em</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-contas">
+        <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Prontuários Prontos para Faturamento</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade</th>
+          <th>Atualizado em</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-faturamento">
+        <tr><td colspan="5" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Prontuários em Auditoria</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade</th>
+          <th>Atualizado em</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-auditoria">
+        <tr><td colspan="5" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/contas_medicas.js') }}"></script>
+{% endblock %}

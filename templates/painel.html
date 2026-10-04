@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block titulo %}Painel Tempo Real{% endblock %}
+{% block titulo_pagina %}Painel de Chamada{% endblock %}
+{% block subtitulo_pagina %}Movimentação de prontuários em tempo real{% endblock %}
+
+{% block conteudo %}
+<div id="painel-root" data-poll-interval="{{ config.PAINEL_POLL_INTERVAL_MS }}">
+
+  <div class="linha-kpis">
+    <div class="kpi-card ciano">
+      <div class="kpi-num" id="kpi-altas">--</div>
+      <div class="kpi-desc">Altas Pendentes</div>
+    </div>
+    <div class="kpi-card laranja">
+      <div class="kpi-num" id="kpi-sop">--</div>
+      <div class="kpi-desc">No SOP</div>
+    </div>
+    <div class="kpi-card verde">
+      <div class="kpi-num" id="kpi-contas">--</div>
+      <div class="kpi-desc">Em Contas Médicas</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" id="kpi-faturamento">--</div>
+      <div class="kpi-desc">Prontos p/ Faturamento</div>
+    </div>
+  </div>
+
+  <div class="painel-chamada-grid">
+    <div class="card-branco painel-chamada-destaque">
+      <span class="texto-suave" style="font-size:12px; letter-spacing:0.05em;">ÚLTIMA MOVIMENTAÇÃO</span>
+      <div class="painel-chamada-numero" id="destaque-numero">-</div>
+      <div class="painel-chamada-paciente" id="destaque-paciente">-</div>
+      <div class="painel-chamada-destaque-etiqueta" id="destaque-destino">-</div>
+      <span class="texto-suave" id="destaque-data-hora" style="font-size:12.5px;">-</span>
+    </div>
+
+    <div class="card-branco painel-chamada-lista-card">
+      <h3>Últimas Movimentações</h3>
+      <div class="painel-chamada-lista" id="painel-lista-scroll">
+        <table class="tabela-padrao">
+          <thead>
+            <tr>
+              <th>Nº Prontuário</th>
+              <th>Paciente</th>
+              <th>Destino</th>
+              <th>Data/Hora</th>
+              <th>Tempo</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-ultimos">
+            <tr><td colspan="5" class="vazio-estado">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/painel.js') }}"></script>
+{% endblock %}

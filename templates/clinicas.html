@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Clínicas{% endblock %}
+{% block titulo_pagina %}Clínicas{% endblock %}
+{% block subtitulo_pagina %}Clínicas/setores cadastrados no sistema hospitalar{% endblock %}
+
+{% block conteudo %}
+<p class="texto-suave mb-16">
+  Lista consultada ao vivo no sistema hospitalar (ISIVITA/SESA). O cadastro de clínicas é feito por lá, não neste sistema.
+</p>
+
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Clínicas</h3>
+    <span class="texto-suave">{{ total }} clínica(s) · da mais antiga para a mais nova</span>
+  </div>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nome</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in unidades %}
+        <tr><td>{{ u.dsc_clinica }}</td></tr>
+        {% else %}
+        <tr><td class="vazio-estado">Nenhuma clínica encontrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_paginas > 1 %}
+  <div class="flex-entre mt-16">
+    <a href="{{ url_for('clinicas', pagina=pagina-1) if pagina > 1 else '#' }}"
+       class="btn btn-outline btn-sm {{ 'btn-ghost' if pagina <= 1 }}">Anterior</a>
+    <span class="texto-suave">Página {{ pagina }} de {{ total_paginas }}</span>
+    <a href="{{ url_for('clinicas', pagina=pagina+1) if pagina < total_paginas else '#' }}"
+       class="btn btn-outline btn-sm {{ 'btn-ghost' if pagina >= total_paginas }}">Próxima</a>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Clínicas Locais</h3>
+    <button class="btn btn-laranja btn-sm" id="btn-nova-clinica-local" type="button">
+      {{ icons.icone('plus') }} Nova Clínica
+    </button>
+  </div>
+  <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
+    Clínicas cadastradas neste sistema (não vêm do ISIVITA). Aparecem junto com as do histórico de internação no cadastro de pendências.
+  </p>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Código</th>
+          <th>Tipo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-clinicas-locais">
+        <tr><td colspan="4" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-fundo" id="modal-clinica-local">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-clinica-local">{{ icons.icone('x') }}</button>
+    <h3>Nova Clínica Local</h3>
+    <form id="form-clinica-local">
+      <div class="form-grid">
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Nome *</label>
+          <input type="text" name="nome" required>
+        </div>
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Tipo</label>
+          <input type="text" name="tipo" placeholder="Ex: Administrativo, Arquivo">
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-clinica-local">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/clinicas.js') }}"></script>
+{% endblock %}
