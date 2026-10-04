@@ -8,12 +8,17 @@
 # via INTEGRA_DATABASE_URL, somente leitura) ja existem no Postgres do
 # host e nao devem ser recriados/dockerizados.
 #
-# Importante antes de rodar "docker compose up":
-#   - Dentro do container, "localhost" aponta para o proprio container,
-#     nao para o host. No seu .env, troque "localhost" por
-#     "host.docker.internal" em DATABASE_URL e INTEGRA_DATABASE_URL.
-#   - O mapeamento extra_hosts abaixo faz "host.docker.internal" funcionar
-#     tambem no Linux (no Docker Desktop/Mac/Windows ja funciona nativo).
+# Dentro do container, "localhost" aponta para o proprio container, nao
+# para o host onde o Postgres roda - por isso DATABASE_URL e
+# INTEGRA_DATABASE_URL sao sobrescritas abaixo (em "environment") com
+# versoes cifradas que usam "host.docker.internal" em vez de "localhost".
+# O .env continua com "localhost", intacto, para quem roda a app direto
+# no host (fora do Docker). Pra gerar esses valores cifrados de novo
+# (ex: apos trocar a senha do banco):
+#   python3 crypto_utils.py cifrar "postgresql://usuario:senha@host.docker.internal:5432/sop"
+#
+# O mapeamento extra_hosts faz "host.docker.internal" funcionar tambem no
+# Linux (no Docker Desktop/Mac/Windows ja funciona nativo).
 
 services:
   web:
@@ -24,11 +29,14 @@ services:
       - .:/app
     env_file:
       - .env
+    environment:
+      DATABASE_URL: gAAAAABqwszpb-K-eSKaTloFvIN115W76iwJ0GGI4jfrBFsEMtj2PNyJHtTaHOhe7ReQVDwP8DLi5zyUQiwXCPDyv0vc4G47evORSp28j9CDx3v8kwE41NXQNfzXDYVMpBHt5iYgu0KwSYetS3Rfoltsy7y2y5NJQiUbmqwJaqrUS2FOEyGrLFU=
+      INTEGRA_DATABASE_URL: gAAAAABqwszprl7wMAPRzBH8vR30PfeZn5GFRN3acHpfREpiOOnarNu8Rezf7xnXqm88Beqw4j0CmJiPeSEyQz_fzogyuY_feE6z7A3TDxIAYv5SA9duyuTpKbDh9Bo9S8EkESx3GMGYDxx2OvQ02b311ObXk-h4B6SIp5A0xiOXh9kpEN5d8mE=
     ports:
-      - "8000:8000"
+      - "5500:5500"
     command: >
       sh -c "pip install --no-cache-dir -r requirements.txt &&
-             gunicorn -w 4 -b 0.0.0.0:8000 app:app"
+             gunicorn -w 4 -b 0.0.0.0:5500 app:app"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
