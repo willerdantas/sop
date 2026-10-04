@@ -67,21 +67,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-function badgeCriticidade(criticidade) {
-  const mapa = { alta: "badge-critica", media: "badge-media", baixa: "badge-baixa" };
-  return `<span class="badge ${mapa[criticidade] || "badge-media"}">${criticidade || "-"}</span>`;
-}
-
-function badgeStatusPendencia(status) {
-  const mapa = {
-    aberta: '<span class="badge badge-pendencia">Aberta</span>',
-    em_analise: '<span class="badge badge-media">Em análise</span>',
-    resolvida: '<span class="badge badge-media">Resolvida (aguardando SOP)</span>',
-    confirmada: '<span class="badge badge-ok">Confirmada</span>',
-  };
-  return mapa[status] || status;
-}
-
 function acoesPendencia(p) {
   if (p.status === "aberta" || p.status === "em_analise") {
     return `<button class="btn btn-primario btn-sm" onclick="resolverPendencia(${p.id})">Resolver</button>`;

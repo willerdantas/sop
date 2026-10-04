@@ -43,5 +43,11 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
 
+    # Cache dos arquivos estaticos (CSS/JS/imagens) no navegador. Sem isso,
+    # o Flask manda "Cache-Control: no-cache", forcando o navegador a
+    # revalidar com o servidor a cada carregamento de pagina - fica bem
+    # perceptivel em imagens grandes como a logo.
+    SEND_FILE_MAX_AGE_DEFAULT = int(os.environ.get("STATIC_CACHE_SECONDS", "604800"))  # 7 dias
+
     # Intervalo (ms) de atualizacao do painel em tempo real no front-end
     PAINEL_POLL_INTERVAL_MS = int(os.environ.get("PAINEL_POLL_INTERVAL_MS", "5000"))

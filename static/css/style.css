@@ -43,7 +43,7 @@
 
   --largura-sidebar-recolhida: 68px;
   --largura-sidebar-expandida: 240px;
-  --altura-header: 76px;
+  --altura-header: 104px;
 
   --transicao-padrao: 0.22s ease;
 }
@@ -92,16 +92,16 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 #loading-overlay .loading-logo-wrap {
   position: relative;
-  width: 128px;
-  height: 128px;
+  width: 256px;
+  height: 256px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 #loading-overlay .loading-logo {
-  width: 88px;
-  height: 88px;
+  width: 176px;
+  height: 176px;
   object-fit: contain;
   border-radius: 50%;
   background: var(--cor-branco);
@@ -172,7 +172,7 @@ ul { list-style: none; margin: 0; padding: 0; }
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 380px;
+  max-width: 520px;
   background: var(--cor-branco);
   border-radius: var(--raio-padrao);
   box-shadow: var(--sombra-elevada);
@@ -184,8 +184,8 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 .login-logo {
-  max-width: 220px;
-  max-height: 110px;
+  max-width: 440px;
+  max-height: 220px;
   object-fit: contain;
   margin-bottom: 18px;
 }
@@ -441,7 +441,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 .topo-logo {
-  height: 42px;
+  height: 84px;
   object-fit: contain;
 }
 

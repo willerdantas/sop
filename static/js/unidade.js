@@ -85,21 +85,6 @@ async function enviarParaSOP(id) {
   }
 }
 
-function badgeCriticidade(criticidade) {
-  const mapa = { alta: "badge-critica", media: "badge-media", baixa: "badge-baixa" };
-  return `<span class="badge ${mapa[criticidade] || "badge-media"}">${criticidade || "-"}</span>`;
-}
-
-function badgeStatusPendencia(status) {
-  const mapa = {
-    aberta: '<span class="badge badge-pendencia">Aberta</span>',
-    em_analise: '<span class="badge badge-media">Em análise</span>',
-    resolvida: '<span class="badge badge-media">Resolvida (aguardando SOP)</span>',
-    confirmada: '<span class="badge badge-ok">Confirmada</span>',
-  };
-  return mapa[status] || status;
-}
-
 async function carregarPendenciasUnidade() {
   const tbody = document.getElementById("tbody-pendencias-unidade");
   const contador = document.getElementById("contador-pendencias-unidade");
