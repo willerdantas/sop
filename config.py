@@ -47,7 +47,13 @@ class Config:
     # o Flask manda "Cache-Control: no-cache", forcando o navegador a
     # revalidar com o servidor a cada carregamento de pagina - fica bem
     # perceptivel em imagens grandes como a logo.
-    SEND_FILE_MAX_AGE_DEFAULT = int(os.environ.get("STATIC_CACHE_SECONDS", "604800"))  # 7 dias
+    SEND_FILE_MAX_AGE_DEFAULT = int(os.environ.get("STATIC_CACHE_SECONDS", "3600"))  # 1 hora
+
+    # Faz o Flask checar o arquivo de cada template a cada requisicao e
+    # recarregar se tiver mudado - sem isso, o Gunicorn (que nao reinicia
+    # sozinho) mantem os .html compilados em memoria, entao editar um
+    # template so tem efeito depois de reiniciar o container.
+    TEMPLATES_AUTO_RELOAD = True
 
     # Intervalo (ms) de atualizacao do painel em tempo real no front-end
     PAINEL_POLL_INTERVAL_MS = int(os.environ.get("PAINEL_POLL_INTERVAL_MS", "5000"))

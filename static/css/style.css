@@ -92,16 +92,16 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 #loading-overlay .loading-logo-wrap {
   position: relative;
-  width: 256px;
-  height: 256px;
+  width: 140px;
+  height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 #loading-overlay .loading-logo {
-  width: 176px;
-  height: 176px;
+  width: 96px;
+  height: 96px;
   object-fit: contain;
   border-radius: 50%;
   background: var(--cor-branco);
@@ -112,11 +112,11 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 #loading-overlay .loading-ring {
   position: absolute;
-  inset: 0;
+  inset: -14px;
   border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.35);
+  border: 5px solid rgba(255, 255, 255, 0.25);
   border-top-color: #fff;
-  animation: spin 0.9s linear infinite;
+  animation: spin 1s linear infinite;
 }
 
 #loading-overlay .loading-texto {
@@ -814,5 +814,11 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  /* Mantem o spinner de carregamento (indicador de status breve e essencial,
+     nao decorativo) girando mesmo com "reduzir movimento" ativado. */
+  *:not(#loading-overlay .loading-ring):not(#loading-overlay .loading-logo) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
