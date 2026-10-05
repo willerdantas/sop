@@ -814,11 +814,17 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Mantem o spinner de carregamento (indicador de status breve e essencial,
-     nao decorativo) girando mesmo com "reduzir movimento" ativado. */
-  *:not(#loading-overlay .loading-ring):not(#loading-overlay .loading-logo) {
+  * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Excecao: o spinner de carregamento e um indicador de status breve e
+     essencial (nao decorativo), entao continua girando mesmo com "reduzir
+     movimento" ativado. O pulso da logo (puramente decorativo) fica reduzido. */
+  #loading-overlay .loading-ring {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
   }
 }

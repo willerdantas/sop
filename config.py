@@ -52,8 +52,10 @@ class Config:
     # Faz o Flask checar o arquivo de cada template a cada requisicao e
     # recarregar se tiver mudado - sem isso, o Gunicorn (que nao reinicia
     # sozinho) mantem os .html compilados em memoria, entao editar um
-    # template so tem efeito depois de reiniciar o container.
-    TEMPLATES_AUTO_RELOAD = True
+    # template so tem efeito depois de reiniciar o container. Tem um custo
+    # (stat no disco a cada request), entao fica desligado por padrao e so
+    # e ligado em desenvolvimento via TEMPLATES_AUTO_RELOAD=true no ambiente.
+    TEMPLATES_AUTO_RELOAD = os.environ.get("TEMPLATES_AUTO_RELOAD", "false").lower() == "true"
 
     # Intervalo (ms) de atualizacao do painel em tempo real no front-end
     PAINEL_POLL_INTERVAL_MS = int(os.environ.get("PAINEL_POLL_INTERVAL_MS", "5000"))
