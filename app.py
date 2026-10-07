@@ -196,6 +196,36 @@ def historico_internacao(integra_isn_internacao_leito):
     return isn_internacao, registros
 
 
+def listar_exames_internacao(isn_internacao):
+    """Exames solicitados durante a internacao: t_internacao join t_exame_solic
+    (por isn_internacao) join t_exame (por isn_exame) para o nome do exame."""
+    if not isn_internacao:
+        return []
+    return db.query_integra(
+        """SELECT ex.dsc_exame,
+                  es.dat_solicitacao, es.dat_agendamento,
+                  es.dat_realizacao, es.dat_cancelamento
+           FROM integra_local.t_internacao i
+           JOIN integra_local.t_exame_solic es ON es.isn_internacao = i.isn_internacao
+           LEFT JOIN integra_local.t_exame ex ON ex.isn_exame = es.isn_exame
+           WHERE i.isn_internacao = %s
+           ORDER BY es.dat_solicitacao DESC""",
+        (isn_internacao,)
+    )
+
+
+def resumir_exames_por_nome(exames):
+    """Agrupa a lista de exames por nome, contando quantos houve de cada um."""
+    contagem = {}
+    for ex in exames:
+        nome = ex["dsc_exame"] or "Sem nome"
+        contagem[nome] = contagem.get(nome, 0) + 1
+    return sorted(
+        [{"nome": nome, "quantidade": qtd} for nome, qtd in contagem.items()],
+        key=lambda r: r["nome"]
+    )
+
+
 def listar_altas_pendentes():
     """Altas (destino 1/3/4, internacao real) ainda nao registradas no fluxo,
     com as horas uteis decorridas desde a alta."""
@@ -576,6 +606,8 @@ def register_routes(app):
             return redirect(url_for(destino_erro))
         anexar_unidade_nome(prontuario)
         isn_internacao, historico_leitos = historico_internacao(prontuario.get("integra_isn_internacao_leito"))
+        exames = listar_exames_internacao(isn_internacao)
+        resumo_exames = resumir_exames_por_nome(exames)
 
         if historico_leitos:
             unidades_pendencia = []
@@ -599,6 +631,7 @@ def register_routes(app):
         return render_template(
             "analise.html", prontuario=prontuario, tipos=tipos, profissionais=profissionais,
             isn_internacao=isn_internacao, historico_leitos=historico_leitos,
+            exames=exames, resumo_exames=resumo_exames,
             unidades_pendencia=unidades_pendencia,
             min_data_ocorrencia=min_data_ocorrencia, max_data_ocorrencia=max_data_ocorrencia,
             active_page="sop"
@@ -662,6 +695,14 @@ def register_routes(app):
 
         rows = db.query(sql, params)
         anexar_unidade_nome(rows)
+
+        agora = datetime.now()
+        for row in rows:
+            if row["status_atual"] == "sop" and row["entrou_sop_em"]:
+                row["horas_uteis_no_sop"] = round(horas_uteis_decorridas(row["entrou_sop_em"], agora), 2)
+            else:
+                row["horas_uteis_no_sop"] = None
+
         return jsonify(rows)
 
     @app.route("/api/prontuarios/<int:prontuario_id>", methods=["GET"])

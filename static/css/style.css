@@ -597,6 +597,21 @@ ul { list-style: none; margin: 0; padding: 0; }
   margin-bottom: 16px;
 }
 
+.secao-recolhivel summary {
+  cursor: pointer;
+  list-style: none;
+}
+.secao-recolhivel summary::-webkit-details-marker { display: none; }
+.secao-recolhivel summary h3 { margin-bottom: 0; }
+.secao-recolhivel summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--cor-teal-escuro);
+  transition: transform 0.15s ease;
+}
+.secao-recolhivel[open] summary::before { transform: rotate(90deg); }
+
 .linha-kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
