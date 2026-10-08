@@ -977,10 +977,13 @@ def register_routes(app):
             """SELECT i.isn_internacao, p.num_prontuario, p.dsc_nome AS paciente_nome,
                       MIN(il.dat_internacao) AS dat_internacao, MAX(il.dat_alta) AS dat_alta,
                       (ARRAY_AGG(il.isn_internacao_leito ORDER BY il.isn_internacao_leito DESC))[1]
-                          AS isn_internacao_leito
+                          AS isn_internacao_leito,
+                      (ARRAY_AGG(d.dsc_destino ORDER BY il.isn_internacao_leito DESC))[1]
+                          AS dsc_destino
                FROM integra_local.t_internacao i
                JOIN integra_local.t_paciente p ON p.isn_paciente = i.isn_paciente
                JOIN integra_local.t_internacao_leito il ON il.isn_internacao = i.isn_internacao
+               LEFT JOIN integra_local.t_destino d ON d.isn_destino = il.isn_destino
                WHERE p.num_prontuario = %s AND i.isn_tipo_atendimento = 1
                GROUP BY i.isn_internacao, p.num_prontuario, p.dsc_nome
                ORDER BY dat_internacao DESC""",

@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-novo-prontuario").addEventListener("click", () => {
     document.getElementById("form-buscar-internacao").reset();
     document.getElementById("tbody-busca-internacoes").innerHTML =
-      `<tr><td colspan="5" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>`;
+      `<tr><td colspan="6" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>`;
     abrirModal("modal-novo-prontuario");
   });
 
@@ -88,11 +88,11 @@ async function buscarInternacoesPorProntuario() {
   const tbody = document.getElementById("tbody-busca-internacoes");
   if (!numero) return;
 
-  tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Buscando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Buscando...</td></tr>`;
   try {
     const lista = await apiFetch(`/api/internacoes/buscar?numero=${encodeURIComponent(numero)}`);
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Nenhuma internação encontrada para este número de prontuário.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhuma internação encontrada para este número de prontuário.</td></tr>`;
       return;
     }
 
@@ -102,6 +102,7 @@ async function buscarInternacoesPorProntuario() {
         <td>${i.paciente_nome}</td>
         <td>${formatarDataSimples(i.dat_internacao)}</td>
         <td>${i.dat_alta ? formatarDataSimples(i.dat_alta) : '<span class="texto-suave">em andamento</span>'}</td>
+        <td>${i.dsc_destino ? `<span class="badge ${DESTINO_BADGE_CLASSE[i.dsc_destino] || "badge-unidade"}">${i.dsc_destino}</span>` : "-"}</td>
         <td class="acoes-linha">
           ${i.status_atual
             ? badgeStatus(i.status_atual)
@@ -110,7 +111,7 @@ async function buscarInternacoesPorProntuario() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao buscar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao buscar: ${e.message}</td></tr>`;
   }
 }
 
