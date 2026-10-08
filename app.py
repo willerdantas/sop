@@ -16,6 +16,7 @@ Execute com:
 """
 from datetime import datetime, date, time as dtime, timedelta
 from functools import wraps
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -53,6 +54,18 @@ STATUS_LABEL = {
 # 1 = Residencia, 3 = Outro hospital, 4 = Obito.
 ALTAS_DESTINOS_VALIDOS = (1, 3, 4)
 ALTAS_DATA_INICIO = "2026-10-01"
+
+
+FUSO_HORARIO_HOSPITAL = ZoneInfo("America/Fortaleza")
+
+
+def agora_local():
+    """Hora atual no fuso do hospital, "naive" (sem tzinfo) para poder ser
+    subtraida diretamente dos timestamps do Postgres (tambem naive, mas ja
+    gravados nesse mesmo fuso). Sem isso, o relogio do container (que pode
+    estar em UTC) fica ate 3h adiantado em relacao ao banco, inflando os
+    cronometros de tempo decorrido."""
+    return datetime.now(FUSO_HORARIO_HOSPITAL).replace(tzinfo=None)
 
 
 def horas_uteis_decorridas(inicio, fim):
@@ -257,7 +270,7 @@ def listar_altas_pendentes():
     )
     importadas_ids = {r["integra_isn_internacao_leito"] for r in ja_importadas}
 
-    agora = datetime.now()
+    agora = agora_local()
     pendentes = []
     for a in altas:
         isn = int(a["isn_internacao_leito"])
@@ -696,7 +709,7 @@ def register_routes(app):
         rows = db.query(sql, params)
         anexar_unidade_nome(rows)
 
-        agora = datetime.now()
+        agora = agora_local()
         for row in rows:
             if row["status_atual"] == "sop" and row["entrou_sop_em"]:
                 row["horas_uteis_no_sop"] = round(horas_uteis_decorridas(row["entrou_sop_em"], agora), 2)
@@ -969,7 +982,7 @@ def register_routes(app):
         rows = db.query(sql, params)
         anexar_unidade_nome(rows)
 
-        agora = datetime.now()
+        agora = agora_local()
         for row in rows:
             row["horas_uteis_desde_abertura"] = round(horas_uteis_decorridas(row["data_abertura"], agora), 2)
 
@@ -1324,7 +1337,7 @@ def register_routes(app):
             "pronto_faturamento": resumo_mapa.get("pronto_faturamento", 0),
         }
 
-        agora = datetime.now()
+        agora = agora_local()
 
         eventos = []
 
@@ -1372,7 +1385,7 @@ def register_routes(app):
             u["data_hora"] = u.pop("timestamp")
 
         return jsonify({
-            "atualizado_em": datetime.now().isoformat(),
+            "atualizado_em": agora_local().isoformat(),
             "contadores": contadores,
             "ultimo": ultimos[0] if ultimos else None,
             "ultimos": ultimos,

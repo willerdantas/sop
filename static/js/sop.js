@@ -108,12 +108,27 @@ function renderizarTabela(lista) {
       <td>${formatarTimerSOP(p.horas_uteis_no_sop)}</td>
       <td class="acoes-linha">
         <button class="btn btn-outline btn-sm" onclick="location.href='/analise/${p.id}'">Analisar</button>
+        <button class="btn btn-outline btn-sm" onclick="enviarParaUnidade(${p.id})">Enviar p/ Unidade</button>
         <button class="btn btn-primario btn-sm" onclick="enviarParaContasMedicas(${p.id}, ${p.pendencias_abertas})">
           Enviar p/ Contas Médicas
         </button>
       </td>
     </tr>
   `).join("");
+}
+
+async function enviarParaUnidade(id) {
+  if (!confirm("Confirmar envio deste prontuário de volta para a Unidade?")) return;
+
+  try {
+    await apiFetch(`/api/prontuarios/${id}/mover`, {
+      method: "POST",
+      body: JSON.stringify({ destino: "unidade", observacao: "Enviado pelo SOP para a Unidade" }),
+    });
+    carregarSOP();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function enviarParaContasMedicas(id, pendenciasAbertas) {

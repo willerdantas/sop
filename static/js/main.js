@@ -138,9 +138,15 @@ async function apiFetch(url, options = {}) {
 function formatarData(isoString) {
   if (!isoString) return "-";
   const d = new Date(isoString);
+  // O backend serializa datetimes "naive" do Postgres (hora local, sem fuso)
+  // como string RFC 1123 terminada em "GMT" (comportamento padrao do Flask),
+  // sem na verdade converter nada. Aqui forcamos a leitura de volta em UTC
+  // para recuperar exatamente a hora local gravada no banco, sem aplicar o
+  // fuso do navegador por cima (o que deslocaria a hora de novo).
   return d.toLocaleString("pt-BR", {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit",
+    timeZone: "UTC",
   });
 }
 
