@@ -125,59 +125,34 @@
   </div>
 </div>
 
-<!-- Modal novo prontuario -->
+<!-- Modal buscar/cadastrar prontuario -->
 <div class="modal-fundo" id="modal-novo-prontuario">
   <div class="modal-caixa">
     <button class="modal-fechar" data-fechar-modal="modal-novo-prontuario">{{ icons.icone('x') }}</button>
     <h3>Cadastrar Prontuário</h3>
-    <form id="form-novo-prontuario">
-      <div class="form-grid">
-        <div class="campo">
-          <label>Número do Prontuário *</label>
-          <input type="text" name="numero_prontuario" required>
-        </div>
-        <div class="campo">
-          <label>Nome do Paciente *</label>
-          <input type="text" name="paciente_nome" required>
-        </div>
-        <div class="campo">
-          <label>Matrícula do Paciente</label>
-          <input type="text" name="paciente_matricula">
-        </div>
-        <div class="campo">
-          <label>Unidade de Origem *</label>
-          <select name="unidade_id" required>
-            <option value="">Selecione</option>
-            {% for u in unidades %}
-            <option value="{{ u.id }}">{{ u.nome }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="campo">
-          <label>Data de Internação</label>
-          <input type="date" name="data_internacao">
-        </div>
-        <div class="campo">
-          <label>Data de Alta</label>
-          <input type="date" name="data_alta">
-        </div>
-        <div class="campo">
-          <label>Prioridade</label>
-          <select name="prioridade">
-            <option value="normal">Normal</option>
-            <option value="urgente">Urgente</option>
-          </select>
-        </div>
-        <div class="campo">
-          <label>Localização Física</label>
-          <input type="text" name="localizacao_fisica" placeholder="Ex: Armário 3, prateleira B">
-        </div>
+    <form id="form-buscar-internacao" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:30px;">
+      <div class="campo" style="flex:1; margin-bottom:0;">
+        <label>Número do Prontuário *</label>
+        <input type="text" id="busca-numero-prontuario" required placeholder="Ex: 624034" autofocus>
       </div>
-      <div class="form-acoes">
-        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-novo-prontuario">Cancelar</button>
-        <button type="submit" class="btn btn-primario">Salvar</button>
-      </div>
+      <button type="submit" class="btn btn-primario btn-sm" style="width:auto;">Buscar</button>
     </form>
+    <div class="tabela-wrap">
+      <table class="tabela-padrao">
+        <thead>
+          <tr>
+            <th>Nº Internação</th>
+            <th>Paciente</th>
+            <th>Data Internação</th>
+            <th>Data Alta</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-busca-internacoes">
+          <tr><td colspan="5" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 <!-- Modal registrar alta no fluxo -->

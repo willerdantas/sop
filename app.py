@@ -400,7 +400,8 @@ ENDPOINT_PARA_PAGINAS = {
     "analise_c_medicas_prontuario": ("contas_medicas",),
     "api_listar_prontuarios": ("sop", "unidade", "contas_medicas"),
     "api_obter_prontuario": ("sop", "unidade", "contas_medicas"),
-    "api_criar_prontuario": ("sop",),
+    "api_buscar_internacoes_prontuario": ("sop",),
+    "api_registrar_internacao": ("sop",),
     "api_mover_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_confirmar_recebimento_prontuario": ("contas_medicas",),
     "api_confirmar_recebimento_unidade": ("unidade",),
@@ -540,8 +541,7 @@ def register_routes(app):
     @app.route("/sop")
     @login_required
     def sop():
-        unidades = listar_unidades_integra()
-        return render_template("sop.html", unidades=unidades, active_page="sop")
+        return render_template("sop.html", active_page="sop")
 
     @app.route("/contas-medicas")
     @login_required
@@ -767,41 +767,6 @@ def register_routes(app):
         anexar_unidade_nome(row)
         return jsonify(row)
 
-    @app.route("/api/prontuarios", methods=["POST"])
-    @login_required
-    def api_criar_prontuario():
-        data = request.get_json(force=True)
-        numero = data.get("numero_prontuario", "").strip()
-        paciente = data.get("paciente_nome", "").strip()
-        unidade_id = data.get("unidade_id")
-
-        if not numero or not paciente or not unidade_id:
-            return jsonify({"erro": "numero_prontuario, paciente_nome e unidade_id sao obrigatorios"}), 400
-
-        try:
-            novo = db.execute(
-                """INSERT INTO prontuarios
-                    (numero_prontuario, paciente_nome, paciente_matricula,
-                     unidade_id, data_internacao, data_alta, prioridade,
-                     localizacao_fisica, status_atual, recebido_unidade_em)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'unidade',NOW())
-                   RETURNING *""",
-                (
-                    numero, paciente, data.get("paciente_matricula"),
-                    unidade_id, data.get("data_internacao"), data.get("data_alta"),
-                    data.get("prioridade", "normal"), data.get("localizacao_fisica"),
-                )
-            )
-            db.execute(
-                """INSERT INTO movimentacoes (prontuario_id, origem, destino, usuario_id, observacao)
-                   VALUES (%s, 'cadastro', 'unidade', %s, 'Cadastro inicial do prontuario')""",
-                (novo["id"], session["usuario_id"])
-            )
-            return jsonify(novo), 201
-        except psycopg2.errors.UniqueViolation:
-            db.get_conn().rollback()
-            return jsonify({"erro": "numero de prontuario ja cadastrado"}), 409
-
     @app.route("/api/prontuarios/<int:prontuario_id>/mover", methods=["POST"])
     @login_required
     def api_mover_prontuario(prontuario_id):
@@ -995,6 +960,96 @@ def register_routes(app):
                    VALUES (%s, 'cadastro', 'sop', %s, %s)""",
                 (novo["id"], session["usuario_id"],
                  f"Alta hospitalar importada do IntegraSH ({alta['dsc_destino'] or 'destino nao informado'})")
+            )
+            return jsonify(novo), 201
+        except psycopg2.errors.UniqueViolation:
+            db.get_conn().rollback()
+            return jsonify({"erro": "numero de prontuario ja cadastrado"}), 409
+
+    @app.route("/api/internacoes/buscar", methods=["GET"])
+    @login_required
+    def api_buscar_internacoes_prontuario():
+        numero = (request.args.get("numero") or "").strip()
+        if not numero:
+            return jsonify({"erro": "informe o numero do prontuario"}), 400
+
+        internacoes = db.query_integra(
+            """SELECT i.isn_internacao, p.num_prontuario, p.dsc_nome AS paciente_nome,
+                      MIN(il.dat_internacao) AS dat_internacao, MAX(il.dat_alta) AS dat_alta,
+                      (ARRAY_AGG(il.isn_internacao_leito ORDER BY il.isn_internacao_leito DESC))[1]
+                          AS isn_internacao_leito
+               FROM integra_local.t_internacao i
+               JOIN integra_local.t_paciente p ON p.isn_paciente = i.isn_paciente
+               JOIN integra_local.t_internacao_leito il ON il.isn_internacao = i.isn_internacao
+               WHERE p.num_prontuario = %s AND i.isn_tipo_atendimento = 1
+               GROUP BY i.isn_internacao, p.num_prontuario, p.dsc_nome
+               ORDER BY dat_internacao DESC""",
+            (numero,)
+        )
+        if not internacoes:
+            return jsonify([])
+
+        isn_leitos = [int(i["isn_internacao_leito"]) for i in internacoes]
+        registrados = db.query(
+            "SELECT integra_isn_internacao_leito, status_atual FROM prontuarios WHERE integra_isn_internacao_leito = ANY(%s)",
+            (isn_leitos,)
+        )
+        mapa_registrados = {r["integra_isn_internacao_leito"]: r["status_atual"] for r in registrados}
+
+        for i in internacoes:
+            leito = int(i["isn_internacao_leito"])
+            i["status_atual"] = mapa_registrados.get(leito)
+
+        return jsonify(internacoes)
+
+    @app.route("/api/internacoes/<int:isn_internacao_leito>/registrar", methods=["POST"])
+    @login_required
+    def api_registrar_internacao(isn_internacao_leito):
+        ja_existe = db.query(
+            "SELECT id FROM prontuarios WHERE integra_isn_internacao_leito = %s",
+            (isn_internacao_leito,), fetchone=True
+        )
+        if ja_existe:
+            return jsonify({"erro": "esta internacao ja foi registrada no fluxo"}), 409
+
+        internacao = db.query_integra(
+            """SELECT il.isn_internacao_leito, il.isn_clinica, il.dat_internacao, il.dat_alta,
+                      p.num_prontuario, p.dsc_nome AS paciente_nome
+               FROM integra_local.t_internacao_leito il
+               JOIN integra_local.t_internacao i ON i.isn_internacao = il.isn_internacao
+               JOIN integra_local.t_paciente p ON p.isn_paciente = i.isn_paciente
+               WHERE il.isn_internacao_leito = %s AND i.isn_tipo_atendimento = 1""",
+            (isn_internacao_leito,), fetchone=True
+        )
+        if not internacao:
+            return jsonify({"erro": "internacao nao encontrada no sistema hospitalar"}), 404
+
+        numero_prontuario = (internacao["num_prontuario"] or "").strip()
+        if not numero_prontuario:
+            return jsonify({"erro": "esta internacao nao possui numero de prontuario no sistema hospitalar"}), 400
+
+        data = request.get_json(force=True)
+
+        try:
+            novo = db.execute(
+                """INSERT INTO prontuarios
+                    (numero_prontuario, paciente_nome, unidade_id, data_internacao,
+                     data_alta, prioridade, localizacao_fisica, status_atual,
+                     integra_isn_internacao_leito)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,'sop',%s)
+                   RETURNING *""",
+                (
+                    numero_prontuario, internacao["paciente_nome"],
+                    int(internacao["isn_clinica"]) if internacao["isn_clinica"] is not None else None,
+                    internacao["dat_internacao"], internacao["dat_alta"],
+                    data.get("prioridade", "normal"), data.get("localizacao_fisica"),
+                    isn_internacao_leito,
+                )
+            )
+            db.execute(
+                """INSERT INTO movimentacoes (prontuario_id, origem, destino, usuario_id, observacao)
+                   VALUES (%s, 'cadastro', 'sop', %s, 'Registrado manualmente via busca por numero de prontuario')""",
+                (novo["id"], session["usuario_id"])
             )
             return jsonify(novo), 201
         except psycopg2.errors.UniqueViolation:

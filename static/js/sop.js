@@ -15,7 +15,12 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-altas-anterior").addEventListener("click", () => carregarAltas(altasPaginaAtual - 1));
   document.getElementById("btn-altas-proxima").addEventListener("click", () => carregarAltas(altasPaginaAtual + 1));
 
-  document.getElementById("btn-novo-prontuario").addEventListener("click", () => abrirModal("modal-novo-prontuario"));
+  document.getElementById("btn-novo-prontuario").addEventListener("click", () => {
+    document.getElementById("form-buscar-internacao").reset();
+    document.getElementById("tbody-busca-internacoes").innerHTML =
+      `<tr><td colspan="5" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>`;
+    abrirModal("modal-novo-prontuario");
+  });
 
   document.getElementById("form-registrar-alta").addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -35,18 +40,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  document.getElementById("form-novo-prontuario").addEventListener("submit", async (ev) => {
+  document.getElementById("form-buscar-internacao").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const form = ev.target;
-    const dados = Object.fromEntries(new FormData(form).entries());
-    try {
-      await apiFetch("/api/prontuarios", { method: "POST", body: JSON.stringify(dados) });
-      fecharModal("modal-novo-prontuario");
-      form.reset();
-      carregarSOP();
-    } catch (e) {
-      alert(e.message);
-    }
+    await buscarInternacoesPorProntuario();
   });
 
   let timerBusca;
@@ -85,6 +81,51 @@ function atualizarKpis(lista) {
   document.getElementById("kpi-sem-pendencia").textContent = lista.filter(p => p.pendencias_abertas == 0).length;
   document.getElementById("kpi-com-pendencia").textContent = lista.filter(p => p.pendencias_abertas > 0).length;
   document.getElementById("kpi-urgentes").textContent = lista.filter(p => p.prioridade === "urgente").length;
+}
+
+async function buscarInternacoesPorProntuario() {
+  const numero = document.getElementById("busca-numero-prontuario").value.trim();
+  const tbody = document.getElementById("tbody-busca-internacoes");
+  if (!numero) return;
+
+  tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Buscando...</td></tr>`;
+  try {
+    const lista = await apiFetch(`/api/internacoes/buscar?numero=${encodeURIComponent(numero)}`);
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Nenhuma internação encontrada para este número de prontuário.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map((i) => `
+      <tr>
+        <td>${i.isn_internacao}</td>
+        <td>${i.paciente_nome}</td>
+        <td>${formatarDataSimples(i.dat_internacao)}</td>
+        <td>${i.dat_alta ? formatarDataSimples(i.dat_alta) : '<span class="texto-suave">em andamento</span>'}</td>
+        <td class="acoes-linha">
+          ${i.status_atual
+            ? badgeStatus(i.status_atual)
+            : `<button class="btn btn-laranja btn-sm" onclick="registrarInternacao(${i.isn_internacao_leito})">Registrar no Fluxo</button>`}
+        </td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao buscar: ${e.message}</td></tr>`;
+  }
+}
+
+async function registrarInternacao(isnInternacaoLeito) {
+  if (!confirm("Confirmar o registro desta internação no fluxo?")) return;
+  try {
+    await apiFetch(`/api/internacoes/${isnInternacaoLeito}/registrar`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await buscarInternacoesPorProntuario();
+    carregarSOP();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 function renderizarTabela(lista) {

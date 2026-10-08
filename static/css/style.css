@@ -721,6 +721,7 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
   box-shadow: var(--sombra-elevada);
 }
 .modal-caixa h3 { margin-bottom: 18px; color: var(--cor-teal-escuro); }
+#modal-novo-prontuario .modal-caixa { max-width: 1040px; }
 .modal-fechar {
   float: right;
   background: none;
