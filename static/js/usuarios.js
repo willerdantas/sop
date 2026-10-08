@@ -46,7 +46,7 @@ async function carregar() {
   try {
     const lista = await apiFetch("/api/usuarios");
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhum usuário cadastrado.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum usuário cadastrado.</td></tr>`;
       return;
     }
     tbody.innerHTML = lista.map((u) => `
@@ -55,16 +55,19 @@ async function carregar() {
         <td>${u.login}</td>
         <td>${u.email || "-"}</td>
         <td>${rotuloPerfil(u.perfil)}</td>
+        <td>${u.unidade_nome || "-"}</td>
         <td>${u.ativo ? '<span class="badge badge-ok">Ativo</span>' : '<span class="badge badge-pendencia">Inativo</span>'}</td>
         <td>${u.ultimo_login ? formatarData(u.ultimo_login) : "Nunca acessou"}</td>
         <td class="acoes-linha">
           <button class="btn btn-outline btn-sm" onclick='editarUsuario(${JSON.stringify(u)})'>Editar</button>
-          <button class="btn btn-perigo btn-sm" onclick="excluirUsuario(${u.id})">Desativar</button>
+          ${u.ativo
+            ? `<button class="btn btn-perigo btn-sm" onclick="excluirUsuario(${u.id})">Desativar</button>`
+            : `<button class="btn btn-primario btn-sm" onclick="ativarUsuario(${u.id})">Ativar</button>`}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
@@ -99,6 +102,16 @@ async function excluirUsuario(id) {
   if (!confirm("Desativar este usuário?")) return;
   try {
     await apiFetch(`/api/usuarios/${id}`, { method: "DELETE" });
+    carregar();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function ativarUsuario(id) {
+  if (!confirm("Ativar este usuário?")) return;
+  try {
+    await apiFetch(`/api/usuarios/${id}/ativar`, { method: "POST" });
     carregar();
   } catch (e) {
     alert(e.message);

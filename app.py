@@ -593,7 +593,7 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def usuarios():
-        unidades = listar_unidades_integra()
+        unidades = listar_unidades_integra() + listar_unidades_locais_opcoes()
         perfis = db.query("SELECT nome FROM perfis WHERE ativo = TRUE ORDER BY nome")
         return render_template("usuarios.html", unidades=unidades, perfis=perfis, active_page="usuarios")
 
@@ -1324,6 +1324,7 @@ def register_routes(app):
             """SELECT id, nome, login, email, perfil, unidade_id, ativo, criado_em, ultimo_login
                FROM usuarios ORDER BY nome"""
         )
+        anexar_unidade_nome(rows)
         return jsonify(rows)
 
     @app.route("/api/usuarios", methods=["POST"])
@@ -1371,6 +1372,13 @@ def register_routes(app):
     @perfil_required("admin")
     def api_excluir_usuario(usuario_id):
         db.execute("UPDATE usuarios SET ativo = FALSE WHERE id = %s", (usuario_id,))
+        return jsonify({"ok": True})
+
+    @app.route("/api/usuarios/<int:usuario_id>/ativar", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_ativar_usuario(usuario_id):
+        db.execute("UPDATE usuarios SET ativo = TRUE WHERE id = %s", (usuario_id,))
         return jsonify({"ok": True})
 
     # -----------------------------------------------------------
