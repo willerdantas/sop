@@ -79,7 +79,7 @@ async function carregarContas() {
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
         <td>${formatarData(p.recebido_contas_medicas_em)}</td>
         <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick="location.href='/analise/${p.id}'">Analisar</button>
+          <button class="btn btn-outline btn-sm" onclick="location.href='/analise_c_medicas/${p.id}'">Analisar</button>
           <button class="btn btn-verde-agua btn-sm" onclick="devolverParaSOP(${p.id})">Devolver p/ SOP</button>
           <button class="btn btn-secundario btn-sm" ${p.pendencias_abertas > 0 ? "disabled title='Resolva as pendências primeiro'" : ""}
             onclick="marcarProntoFaturamento(${p.id}, ${p.pendencias_abertas})">
@@ -139,7 +139,7 @@ async function carregarFaturamento() {
         <td>${p.unidade_nome || "-"}</td>
         <td>${formatarData(p.atualizado_em)}</td>
         <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick="location.href='/analise/${p.id}'">Analisar</button>
+          <button class="btn btn-outline btn-sm" onclick="location.href='/analise_c_medicas/${p.id}'">Analisar</button>
           <button class="btn btn-primario btn-sm" onclick="enviarParaAuditoria(${p.id})">Enviar para Auditoria</button>
         </td>
       </tr>
@@ -178,7 +178,7 @@ async function carregarAuditoria() {
         <td>${p.unidade_nome || "-"}</td>
         <td>${formatarData(p.atualizado_em)}</td>
         <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick="location.href='/analise/${p.id}'">Analisar</button>
+          <button class="btn btn-outline btn-sm" onclick="location.href='/analise_c_medicas/${p.id}'">Analisar</button>
           <button class="btn btn-primario btn-sm" onclick="finalizarProcesso(${p.id})">Finalizar Processo</button>
         </td>
       </tr>

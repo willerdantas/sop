@@ -64,7 +64,7 @@ function renderizarTabela(lista) {
           : `<span class="badge badge-ok">Sem pendência</span>`}</td>
       <td>${formatarData(p.atualizado_em)}</td>
       <td class="acoes-linha">
-        <button class="btn btn-outline btn-sm" onclick="location.href='/analise/${p.id}'">Analisar</button>
+        <button class="btn btn-outline btn-sm" onclick="location.href='/analise_unidade/${p.id}'">Analisar</button>
         <button class="btn btn-primario btn-sm" onclick="enviarParaSOP(${p.id})">Enviar p/ SOP</button>
       </td>
     </tr>

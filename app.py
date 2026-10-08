@@ -395,7 +395,9 @@ ENDPOINT_PARA_PAGINAS = {
     "painel": ("painel",),
     "clinicas": ("clinicas",),
     "profissionais": ("profissionais",),
-    "analise_prontuario": ("sop", "unidade", "contas_medicas"),
+    "analise_prontuario": ("sop",),
+    "analise_unidade_prontuario": ("unidade",),
+    "analise_c_medicas_prontuario": ("contas_medicas",),
     "api_listar_prontuarios": ("sop", "unidade", "contas_medicas"),
     "api_obter_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_criar_prontuario": ("sop",),
@@ -604,19 +606,19 @@ def register_routes(app):
             active_page="pendencias"
         )
 
-    @app.route("/analise/<int:prontuario_id>")
-    @login_required
-    def analise_prontuario(prontuario_id):
-        destino_erro = "unidade" if session.get("perfil") == "operador" else "sop"
+    def montar_contexto_analise(prontuario_id, destino_erro):
+        """Monta o contexto compartilhado pelas paginas de analise de
+        prontuario (SOP, Unidade, Contas Medicas). Retorna None (apos
+        flash+redirect ja resolvidos pelo chamador) se o acesso for negado."""
         prontuario = db.query(
             "SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True
         )
         if not prontuario:
             flash("Prontuário não encontrado.", "erro")
-            return redirect(url_for(destino_erro))
+            return None
         if not prontuario_da_unidade_do_usuario(prontuario):
             flash("Você não tem permissão para acessar este prontuário.", "erro")
-            return redirect(url_for(destino_erro))
+            return None
         anexar_unidade_nome(prontuario)
         isn_internacao, historico_leitos = historico_internacao(prontuario.get("integra_isn_internacao_leito"))
         exames = listar_exames_internacao(isn_internacao)
@@ -641,14 +643,37 @@ def register_routes(app):
 
         tipos = db.query("SELECT id, descricao, criticidade FROM tipos_pendencia WHERE ativo = TRUE ORDER BY descricao")
         profissionais = db.query("SELECT nome FROM profissionais WHERE ativo = TRUE ORDER BY nome")
-        return render_template(
-            "analise.html", prontuario=prontuario, tipos=tipos, profissionais=profissionais,
+        return dict(
+            prontuario=prontuario, tipos=tipos, profissionais=profissionais,
             isn_internacao=isn_internacao, historico_leitos=historico_leitos,
             exames=exames, resumo_exames=resumo_exames,
             unidades_pendencia=unidades_pendencia,
             min_data_ocorrencia=min_data_ocorrencia, max_data_ocorrencia=max_data_ocorrencia,
-            active_page="sop"
         )
+
+    @app.route("/analise/<int:prontuario_id>")
+    @login_required
+    def analise_prontuario(prontuario_id):
+        contexto = montar_contexto_analise(prontuario_id, "sop")
+        if contexto is None:
+            return redirect(url_for("sop"))
+        return render_template("analise.html", active_page="sop", **contexto)
+
+    @app.route("/analise_unidade/<int:prontuario_id>")
+    @login_required
+    def analise_unidade_prontuario(prontuario_id):
+        contexto = montar_contexto_analise(prontuario_id, "unidade")
+        if contexto is None:
+            return redirect(url_for("unidade"))
+        return render_template("analise_unidade.html", active_page="unidade", **contexto)
+
+    @app.route("/analise_c_medicas/<int:prontuario_id>")
+    @login_required
+    def analise_c_medicas_prontuario(prontuario_id):
+        contexto = montar_contexto_analise(prontuario_id, "contas_medicas")
+        if contexto is None:
+            return redirect(url_for("contas_medicas"))
+        return render_template("analise_c_medicas.html", active_page="contas_medicas", **contexto)
 
     @app.route("/painel")
     @login_required

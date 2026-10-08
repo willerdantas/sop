@@ -1,7 +1,8 @@
 /**
- * analise.js
- * Pagina de analise de um prontuario especifico: registra pendencias,
- * mostra historico de movimentacao e permite avancar para contas medicas.
+ * analise_c_medicas.js
+ * Pagina de analise de um prontuario a partir de Contas Medicas: registra
+ * pendencias, confirma/devolve pendencias resolvidas pela Unidade e permite
+ * devolver o prontuario para o SOP.
  */
 
 let pendenciasAbertasCount = 0;
@@ -28,60 +29,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  const btnEnviarContas = document.getElementById("btn-enviar-contas");
-  if (btnEnviarContas) {
-    btnEnviarContas.addEventListener("click", async () => {
-      if (pendenciasAbertasCount > 0) {
-        alert("Este prontuário possui pendências abertas. Resolva-as antes de enviar para Contas Médicas.");
-        return;
-      }
-      if (!confirm("Confirmar envio deste prontuário para Contas Médicas?")) return;
+  document.getElementById("btn-enviar-sop").addEventListener("click", async () => {
+    if (!confirm("Confirmar envio deste prontuário para o SOP?")) return;
 
-      try {
-        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
-          method: "POST",
-          body: JSON.stringify({ destino: "contas_medicas", observacao: "Conferido pelo SOP" }),
-        });
-        window.location.href = "/sop";
-      } catch (e) {
-        alert(e.message);
-      }
-    });
-  }
-
-  const btnEnviarUnidade = document.getElementById("btn-enviar-unidade");
-  if (btnEnviarUnidade) {
-    btnEnviarUnidade.addEventListener("click", async () => {
-      if (!confirm("Confirmar envio deste prontuário de volta para a Unidade?")) return;
-
-      try {
-        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
-          method: "POST",
-          body: JSON.stringify({ destino: "unidade", observacao: "Enviado pelo SOP para a Unidade" }),
-        });
-        window.location.href = "/sop";
-      } catch (e) {
-        alert(e.message);
-      }
-    });
-  }
-
-  const btnEnviarSop = document.getElementById("btn-enviar-sop");
-  if (btnEnviarSop) {
-    btnEnviarSop.addEventListener("click", async () => {
-      if (!confirm("Confirmar envio deste prontuário para o SOP?")) return;
-
-      try {
-        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
-          method: "POST",
-          body: JSON.stringify({ destino: "sop", observacao: "Enviado pela Unidade de origem" }),
-        });
-        window.location.href = "/unidade";
-      } catch (e) {
-        alert(e.message);
-      }
-    });
-  }
+    try {
+      await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
+        method: "POST",
+        body: JSON.stringify({ destino: "sop", observacao: "Devolvido pela equipe de Contas Médicas" }),
+      });
+      window.location.href = "/contas-medicas";
+    } catch (e) {
+      alert(e.message);
+    }
+  });
 });
 
 function acoesPendencia(p) {
@@ -92,7 +52,6 @@ function acoesPendencia(p) {
     const info = `<div class="texto-suave" style="margin-bottom:6px;">
       ${p.usuario_resolucao_nome || "-"} · ${formatarData(p.data_resolucao)}
     </div>`;
-    if (USUARIO_PERFIL === "operador") return info;
     return `${info}
       <button class="btn btn-primario btn-sm" onclick="confirmarPendencia(${p.id})">Confirmar</button>
       <button class="btn btn-perigo btn-sm" onclick="devolverPendencia(${p.id})">Devolver</button>`;
