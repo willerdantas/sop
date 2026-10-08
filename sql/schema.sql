@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS prontuarios (
     localizacao_fisica VARCHAR(120),          -- prateleira/armario/setor onde esta fisicamente
     integra_isn_internacao_leito BIGINT UNIQUE, -- isn_internacao_leito de origem (altas ISIVITA), evita reimportar
     recebido_contas_medicas_em TIMESTAMP, -- confirmacao de entrega ao chegar em contas_medicas (null = aguardando)
+    recebido_unidade_em TIMESTAMP, -- confirmacao de entrega ao chegar na unidade vindo do SOP (null = aguardando)
     criado_em          TIMESTAMP NOT NULL DEFAULT NOW(),
     atualizado_em       TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -113,6 +114,12 @@ CREATE TABLE IF NOT EXISTS prontuarios (
 ALTER TABLE prontuarios DROP CONSTRAINT IF EXISTS prontuarios_unidade_id_fkey;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS integra_isn_internacao_leito BIGINT UNIQUE;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_contas_medicas_em TIMESTAMP;
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_unidade_em TIMESTAMP;
+
+-- Prontuarios ja existentes na unidade antes desta coluna existir nao vieram
+-- de um envio do SOP aguardando confirmacao: marca como ja recebidos.
+UPDATE prontuarios SET recebido_unidade_em = atualizado_em
+    WHERE status_atual = 'unidade' AND recebido_unidade_em IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_prontuarios_status ON prontuarios(status_atual);
 CREATE INDEX IF NOT EXISTS idx_prontuarios_unidade ON prontuarios(unidade_id);

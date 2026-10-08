@@ -75,6 +75,33 @@
 </div>
 
 <div class="card-branco">
+  <div class="flex-entre">
+    <h3>Prontuário Enviado para Unidade</h3>
+    <span class="texto-suave" id="contador-enviados-unidade">Carregando...</span>
+  </div>
+  <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
+    Prontuários enviados pelo SOP, aguardando confirmação de entrega física na unidade.
+  </p>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade de Origem</th>
+          <th>Pendências</th>
+          <th>Enviado em</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-enviados-unidade">
+        <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
   <h3>Prontuários na Unidade</h3>
   <div class="tabela-wrap">
     <table class="tabela-padrao">

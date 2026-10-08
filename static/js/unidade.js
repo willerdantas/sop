@@ -29,12 +29,53 @@ async function carregarUnidade() {
   if (dataFim) params.set("data_fim", dataFim);
 
   const tbody = document.getElementById("tbody-unidade");
+  const tbodyEnviados = document.getElementById("tbody-enviados-unidade");
   try {
     const lista = await apiFetch(`/api/prontuarios?${params.toString()}`);
-    renderizarTabela(lista);
-    atualizarKpis(lista);
+    const enviados = lista.filter((p) => !p.recebido_unidade_em);
+    const confirmados = lista.filter((p) => p.recebido_unidade_em);
+
+    renderizarEnviados(enviados);
+    renderizarTabela(confirmados);
+    atualizarKpis(confirmados);
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbodyEnviados.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+  }
+}
+
+function renderizarEnviados(lista) {
+  const tbody = document.getElementById("tbody-enviados-unidade");
+  document.getElementById("contador-enviados-unidade").textContent = `${lista.length} pendente(s)`;
+
+  if (!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhum prontuário aguardando confirmação.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = lista.map((p) => `
+    <tr>
+      <td><strong>${p.numero_prontuario}</strong></td>
+      <td>${p.paciente_nome}</td>
+      <td>${p.unidade_nome || "-"}</td>
+      <td>${p.pendencias_abertas > 0
+          ? `<span class="badge badge-pendencia">${p.pendencias_abertas} aberta(s)</span>`
+          : `<span class="badge badge-ok">Sem pendência</span>`}</td>
+      <td>${formatarData(p.atualizado_em)}</td>
+      <td class="acoes-linha">
+        <button class="btn btn-primario btn-sm" onclick="confirmarRecebimentoUnidade(${p.id})">Recebido</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function confirmarRecebimentoUnidade(id) {
+  if (!confirm("Confirmar que este prontuário foi recebido fisicamente na unidade?")) return;
+  try {
+    await apiFetch(`/api/prontuarios/${id}/confirmar-recebimento-unidade`, { method: "POST" });
+    carregarUnidade();
+  } catch (e) {
+    alert(e.message);
   }
 }
 

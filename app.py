@@ -403,6 +403,7 @@ ENDPOINT_PARA_PAGINAS = {
     "api_criar_prontuario": ("sop",),
     "api_mover_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_confirmar_recebimento_prontuario": ("contas_medicas",),
+    "api_confirmar_recebimento_unidade": ("unidade",),
     "api_historico_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_listar_altas": ("sop",),
     "api_registrar_alta": ("sop",),
@@ -777,8 +778,8 @@ def register_routes(app):
                 """INSERT INTO prontuarios
                     (numero_prontuario, paciente_nome, paciente_matricula,
                      unidade_id, data_internacao, data_alta, prioridade,
-                     localizacao_fisica, status_atual)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'unidade')
+                     localizacao_fisica, status_atual, recebido_unidade_em)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'unidade',NOW())
                    RETURNING *""",
                 (
                     numero, paciente, data.get("paciente_matricula"),
@@ -834,6 +835,12 @@ def register_routes(app):
                 "UPDATE prontuarios SET status_atual = %s, recebido_contas_medicas_em = NULL WHERE id = %s",
                 (destino, prontuario_id)
             )
+        elif destino == "unidade":
+            # Toda nova chegada na unidade (vinda do SOP) exige nova confirmacao de entrega.
+            db.execute(
+                "UPDATE prontuarios SET status_atual = %s, recebido_unidade_em = NULL WHERE id = %s",
+                (destino, prontuario_id)
+            )
         else:
             db.execute(
                 "UPDATE prontuarios SET status_atual = %s WHERE id = %s",
@@ -860,6 +867,26 @@ def register_routes(app):
 
         db.execute(
             "UPDATE prontuarios SET recebido_contas_medicas_em = NOW() WHERE id = %s",
+            (prontuario_id,)
+        )
+        atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
+        return jsonify(atualizado)
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento-unidade", methods=["POST"])
+    @login_required
+    def api_confirmar_recebimento_unidade(prontuario_id):
+        atual = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
+        if not atual:
+            return jsonify({"erro": "prontuario nao encontrado"}), 404
+        if not prontuario_da_unidade_do_usuario(atual):
+            return jsonify({"erro": "sem permissao para confirmar este prontuario"}), 403
+        if atual["status_atual"] != "unidade":
+            return jsonify({"erro": "prontuario nao esta aguardando recebimento na unidade"}), 400
+        if atual["recebido_unidade_em"]:
+            return jsonify({"erro": "entrega deste prontuario ja foi confirmada"}), 409
+
+        db.execute(
+            "UPDATE prontuarios SET recebido_unidade_em = NOW() WHERE id = %s",
             (prontuario_id,)
         )
         atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
