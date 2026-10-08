@@ -742,6 +742,11 @@ def register_routes(app):
             else:
                 row["horas_uteis_no_sop"] = None
 
+            if row["status_atual"] == "unidade" and row["recebido_unidade_em"]:
+                row["horas_uteis_na_unidade"] = round(horas_uteis_decorridas(row["recebido_unidade_em"], agora), 2)
+            else:
+                row["horas_uteis_na_unidade"] = None
+
         return jsonify(rows)
 
     @app.route("/api/prontuarios/<int:prontuario_id>", methods=["GET"])

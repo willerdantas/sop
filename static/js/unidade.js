@@ -89,7 +89,7 @@ function atualizarKpis(lista) {
 function renderizarTabela(lista) {
   const tbody = document.getElementById("tbody-unidade");
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário na unidade no momento.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário na unidade no momento.</td></tr>`;
     return;
   }
 
@@ -104,6 +104,7 @@ function renderizarTabela(lista) {
           ? `<span class="badge badge-pendencia">${p.pendencias_abertas} aberta(s)</span>`
           : `<span class="badge badge-ok">Sem pendência</span>`}</td>
       <td>${formatarData(p.atualizado_em)}</td>
+      <td>${formatarTimerHorasUteis(p.horas_uteis_na_unidade)}</td>
       <td class="acoes-linha">
         <button class="btn btn-outline btn-sm" onclick="location.href='/analise_unidade/${p.id}'">Analisar</button>
         <button class="btn btn-primario btn-sm" onclick="enviarParaSOP(${p.id})">Enviar p/ SOP</button>
