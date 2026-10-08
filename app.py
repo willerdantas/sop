@@ -1041,7 +1041,10 @@ def register_routes(app):
 
         agora = agora_local()
         for row in rows:
-            row["horas_uteis_desde_abertura"] = round(horas_uteis_decorridas(row["data_abertura"], agora), 2)
+            if row["status"] == "confirmada":
+                row["horas_uteis_desde_abertura"] = None
+            else:
+                row["horas_uteis_desde_abertura"] = round(horas_uteis_decorridas(row["data_abertura"], agora), 2)
 
         return jsonify(rows)
 
