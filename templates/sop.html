@@ -65,12 +65,13 @@
           <th>Internação</th>
           <th>Alta</th>
           <th>Destino</th>
+          <th>Motivo Alta</th>
           <th>Tempo</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody-altas">
-        <tr><td colspan="9" class="vazio-estado">Carregando...</td></tr>
+        <tr><td colspan="10" class="vazio-estado">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
@@ -146,11 +147,12 @@
             <th>Data Internação</th>
             <th>Data Alta</th>
             <th>Destino</th>
+            <th>Motivo Alta</th>
             <th>Ações</th>
           </tr>
         </thead>
         <tbody id="tbody-busca-internacoes">
-          <tr><td colspan="6" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>
+          <tr><td colspan="7" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>
         </tbody>
       </table>
     </div>
@@ -185,6 +187,10 @@
       <div class="info-item">
         <label>Destino</label>
         <span id="alta-destino">-</span>
+      </div>
+      <div class="info-item">
+        <label>Motivo Alta</label>
+        <span id="alta-motivo">-</span>
       </div>
     </div>
     <form id="form-registrar-alta">

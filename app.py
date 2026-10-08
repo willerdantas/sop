@@ -247,7 +247,7 @@ def listar_altas_pendentes():
                SELECT DISTINCT ON (il.isn_internacao)
                       il.isn_internacao_leito, il.isn_internacao, il.isn_clinica,
                       il.dat_internacao, il.dat_alta, il.hor_alta,
-                      il.isn_destino, d.dsc_destino,
+                      il.isn_destino, d.dsc_destino, ma.dsc_motivo_alta,
                       c.dsc_clinica AS unidade_nome,
                       p.num_prontuario, p.dsc_nome AS paciente_nome
                FROM integra_local.t_internacao_leito il
@@ -255,6 +255,12 @@ def listar_altas_pendentes():
                JOIN integra_local.t_paciente p ON p.isn_paciente = i.isn_paciente
                LEFT JOIN integra_local.t_clinica c ON c.isn_clinica = il.isn_clinica
                LEFT JOIN integra_local.t_destino d ON d.isn_destino = il.isn_destino
+               LEFT JOIN (
+                   SELECT DISTINCT ON (isn_internacao) isn_internacao, cod_tipo_alta
+                   FROM integra_local.t_internacao_alta
+                   ORDER BY isn_internacao, dat_cadastro DESC
+               ) ia ON ia.isn_internacao = i.isn_internacao
+               LEFT JOIN integra_local.t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
                WHERE il.isn_destino = ANY(%s) AND il.dat_alta >= %s
                      AND i.isn_tipo_atendimento = 1
                      AND il.isn_clinica = ANY(%s)
@@ -295,6 +301,7 @@ def listar_altas_pendentes():
             "hor_alta": a["hor_alta"],
             "isn_destino": int(a["isn_destino"]) if a["isn_destino"] is not None else None,
             "dsc_destino": a["dsc_destino"],
+            "dsc_motivo_alta": a["dsc_motivo_alta"],
             "num_prontuario": (a["num_prontuario"] or "").strip(),
             "paciente_nome": a["paciente_nome"],
             "horas_uteis_desde_alta": round(horas_uteis, 2),
@@ -917,7 +924,7 @@ def register_routes(app):
 
         alta = db.query_integra(
             """SELECT il.isn_internacao_leito, il.isn_clinica, il.dat_internacao,
-                      il.dat_alta, d.dsc_destino,
+                      il.dat_alta, d.dsc_destino, ma.dsc_motivo_alta,
                       c.dsc_clinica AS unidade_nome,
                       p.num_prontuario, p.dsc_nome AS paciente_nome
                FROM integra_local.t_internacao_leito il
@@ -925,6 +932,12 @@ def register_routes(app):
                JOIN integra_local.t_paciente p ON p.isn_paciente = i.isn_paciente
                LEFT JOIN integra_local.t_clinica c ON c.isn_clinica = il.isn_clinica
                LEFT JOIN integra_local.t_destino d ON d.isn_destino = il.isn_destino
+               LEFT JOIN (
+                   SELECT DISTINCT ON (isn_internacao) isn_internacao, cod_tipo_alta
+                   FROM integra_local.t_internacao_alta
+                   ORDER BY isn_internacao, dat_cadastro DESC
+               ) ia ON ia.isn_internacao = i.isn_internacao
+               LEFT JOIN integra_local.t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
                WHERE il.isn_internacao_leito = %s AND i.isn_tipo_atendimento = 1""",
             (isn_internacao_leito,), fetchone=True
         )
@@ -979,13 +992,20 @@ def register_routes(app):
                       (ARRAY_AGG(il.isn_internacao_leito ORDER BY il.isn_internacao_leito DESC))[1]
                           AS isn_internacao_leito,
                       (ARRAY_AGG(d.dsc_destino ORDER BY il.isn_internacao_leito DESC))[1]
-                          AS dsc_destino
+                          AS dsc_destino,
+                      ma.dsc_motivo_alta
                FROM integra_local.t_internacao i
                JOIN integra_local.t_paciente p ON p.isn_paciente = i.isn_paciente
                JOIN integra_local.t_internacao_leito il ON il.isn_internacao = i.isn_internacao
                LEFT JOIN integra_local.t_destino d ON d.isn_destino = il.isn_destino
+               LEFT JOIN (
+                   SELECT DISTINCT ON (isn_internacao) isn_internacao, cod_tipo_alta
+                   FROM integra_local.t_internacao_alta
+                   ORDER BY isn_internacao, dat_cadastro DESC
+               ) ia ON ia.isn_internacao = i.isn_internacao
+               LEFT JOIN integra_local.t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
                WHERE p.num_prontuario = %s AND i.isn_tipo_atendimento = 1
-               GROUP BY i.isn_internacao, p.num_prontuario, p.dsc_nome
+               GROUP BY i.isn_internacao, p.num_prontuario, p.dsc_nome, ma.dsc_motivo_alta
                ORDER BY dat_internacao DESC""",
             (numero,)
         )
@@ -1492,6 +1512,7 @@ def register_routes(app):
                 "paciente_nome": a["paciente_nome"],
                 "destino": None,
                 "destino_label": f"Alta: {a['dsc_destino'] or '-'}",
+                "dsc_motivo_alta": a["dsc_motivo_alta"],
                 "data_alta": a["dat_alta"],
                 "horas_uteis": a["horas_uteis_desde_alta"],
                 "timestamp": alta_datetime,
