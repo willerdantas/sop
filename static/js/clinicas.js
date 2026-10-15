@@ -8,7 +8,10 @@ document.addEventListener("DOMContentLoaded", () => {
   carregar();
 
   document.getElementById("btn-nova-clinica-local").addEventListener("click", () => {
-    document.getElementById("form-clinica-local").reset();
+    const form = document.getElementById("form-clinica-local");
+    form.reset();
+    form.querySelector('[name="id"]').value = "";
+    document.getElementById("titulo-modal-clinica-local").textContent = "Nova Clínica Local";
     abrirModal("modal-clinica-local");
   });
 
@@ -16,16 +19,45 @@ document.addEventListener("DOMContentLoaded", () => {
     ev.preventDefault();
     const form = ev.target;
     const dados = Object.fromEntries(new FormData(form).entries());
+    const id = dados.id;
+    delete dados.id;
 
     try {
-      await apiFetch("/api/unidades-locais", { method: "POST", body: JSON.stringify(dados) });
+      if (id) {
+        await apiFetch(`/api/unidades-locais/${id}`, { method: "PUT", body: JSON.stringify(dados) });
+      } else {
+        await apiFetch("/api/unidades-locais", { method: "POST", body: JSON.stringify(dados) });
+      }
       fecharModal("modal-clinica-local");
       carregar();
     } catch (e) {
       alert(e.message);
     }
   });
+
+  document.getElementById("form-tipo-clinica").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const form = ev.target;
+    const isn = form.querySelector('[name="isn_clinica"]').value;
+    const tipo = form.querySelector('[name="tipo"]').value;
+
+    try {
+      await apiFetch(`/api/clinicas/${isn}/tipo`, { method: "PUT", body: JSON.stringify({ tipo }) });
+      fecharModal("modal-tipo-clinica");
+      window.location.reload();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
 });
+
+function editarTipoClinica(isnClinica, nome, tipoAtual) {
+  const form = document.getElementById("form-tipo-clinica");
+  form.querySelector('[name="isn_clinica"]').value = isnClinica;
+  form.querySelector('[name="tipo"]').value = tipoAtual || "";
+  document.getElementById("tipo-clinica-nome").value = nome;
+  abrirModal("modal-tipo-clinica");
+}
 
 async function carregar() {
   const tbody = document.getElementById("tbody-clinicas-locais");
@@ -41,6 +73,7 @@ async function carregar() {
         <td>${u.codigo || "-"}</td>
         <td>${u.tipo || "-"}</td>
         <td class="acoes-linha">
+          <button class="btn btn-outline btn-sm" onclick='editarClinicaLocal(${JSON.stringify(u)})'>Editar</button>
           <button class="btn btn-perigo btn-sm" onclick="excluirClinicaLocal(${u.id})">Desativar</button>
         </td>
       </tr>
@@ -48,6 +81,15 @@ async function carregar() {
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="4" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
+}
+
+function editarClinicaLocal(clinica) {
+  const form = document.getElementById("form-clinica-local");
+  form.querySelector('[name="id"]').value = clinica.id;
+  form.querySelector('[name="nome"]').value = clinica.nome || "";
+  form.querySelector('[name="tipo"]').value = clinica.tipo || "";
+  document.getElementById("titulo-modal-clinica-local").textContent = "Editar Clínica Local";
+  abrirModal("modal-clinica-local");
 }
 
 async function excluirClinicaLocal(id) {

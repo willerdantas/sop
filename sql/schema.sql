@@ -26,6 +26,15 @@ CREATE TABLE IF NOT EXISTS unidades (
     criado_em       TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- Complementa as clinicas do sistema hospitalar (t_clinica, somente leitura)
+-- com um "tipo" definido manualmente aqui, ja que o cadastro delas nao pode
+-- ser alterado no ISIVITA. Uma linha por isn_clinica que tenha tipo definido.
+CREATE TABLE IF NOT EXISTS clinicas_tipo (
+    isn_clinica     BIGINT PRIMARY KEY,
+    tipo            VARCHAR(60),
+    atualizado_em   TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 -- ---------------------------------------------------------
 -- PERFIS (controle de acesso por pagina, gerenciavel via tela Perfis)
 -- ---------------------------------------------------------
@@ -175,9 +184,14 @@ CREATE TABLE IF NOT EXISTS profissionais (
     uf_conselho     VARCHAR(2),
     telefone        VARCHAR(20),
     email           VARCHAR(150),
+    isn_profissional BIGINT,                -- isn_profissional no sistema hospitalar (ISIVITA), quando houver
+    cbo             VARCHAR(20),            -- Classificacao Brasileira de Ocupacoes
     ativo           BOOLEAN NOT NULL DEFAULT TRUE,
     criado_em       TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE profissionais ADD COLUMN IF NOT EXISTS isn_profissional BIGINT;
+ALTER TABLE profissionais ADD COLUMN IF NOT EXISTS cbo VARCHAR(20);
 
 CREATE INDEX IF NOT EXISTS idx_pendencias_prontuario ON pendencias(prontuario_id);
 CREATE INDEX IF NOT EXISTS idx_pendencias_status ON pendencias(status);

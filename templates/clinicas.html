@@ -19,13 +19,21 @@
       <thead>
         <tr>
           <th>Nome</th>
+          <th>Tipo</th>
+          <th>Ações</th>
         </tr>
       </thead>
       <tbody>
         {% for u in unidades %}
-        <tr><td>{{ u.dsc_clinica }}</td></tr>
+        <tr>
+          <td>{{ u.dsc_clinica }}</td>
+          <td>{{ u.tipo or "-" }}</td>
+          <td class="acoes-linha">
+            <button class="btn btn-outline btn-sm" onclick='editarTipoClinica({{ u.isn_clinica }}, {{ u.dsc_clinica | tojson }}, {{ u.tipo | tojson }})'>Editar</button>
+          </td>
+        </tr>
         {% else %}
-        <tr><td class="vazio-estado">Nenhuma clínica encontrada.</td></tr>
+        <tr><td colspan="3" class="vazio-estado">Nenhuma clínica encontrada.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -72,8 +80,9 @@
 <div class="modal-fundo" id="modal-clinica-local">
   <div class="modal-caixa">
     <button class="modal-fechar" data-fechar-modal="modal-clinica-local">{{ icons.icone('x') }}</button>
-    <h3>Nova Clínica Local</h3>
+    <h3 id="titulo-modal-clinica-local">Nova Clínica Local</h3>
     <form id="form-clinica-local">
+      <input type="hidden" name="id">
       <div class="form-grid">
         <div class="campo" style="grid-column: 1 / -1;">
           <label>Nome *</label>
@@ -86,6 +95,32 @@
       </div>
       <div class="form-acoes">
         <button type="button" class="btn btn-ghost" data-fechar-modal="modal-clinica-local">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal editar tipo de clinica do ISIVITA -->
+<div class="modal-fundo" id="modal-tipo-clinica">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-tipo-clinica">{{ icons.icone('x') }}</button>
+    <h3>Editar Tipo da Clínica</h3>
+    <form id="form-tipo-clinica">
+      <input type="hidden" name="isn_clinica">
+      <div class="form-grid">
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Nome</label>
+          <input type="text" id="tipo-clinica-nome" disabled>
+          <small class="texto-suave">Cadastrado no sistema hospitalar (ISIVITA), não pode ser alterado aqui.</small>
+        </div>
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Tipo</label>
+          <input type="text" name="tipo" placeholder="Ex: Administrativo, Exames">
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-tipo-clinica">Cancelar</button>
         <button type="submit" class="btn btn-primario">Salvar</button>
       </div>
     </form>

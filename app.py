@@ -579,6 +579,13 @@ def register_routes(app):
                LIMIT %s OFFSET %s""",
             (list(UNIDADES_PERMITIDAS), POR_PAGINA, (pagina - 1) * POR_PAGINA)
         )
+        tipos_cadastrados = db.query(
+            "SELECT isn_clinica, tipo FROM clinicas_tipo WHERE isn_clinica = ANY(%s)",
+            ([int(u["isn_clinica"]) for u in unidades],)
+        )
+        mapa_tipos = {t["isn_clinica"]: t["tipo"] for t in tipos_cadastrados}
+        for u in unidades:
+            u["tipo"] = mapa_tipos.get(int(u["isn_clinica"]))
         return render_template(
             "clinicas.html", unidades=unidades, active_page="clinicas",
             pagina=pagina, total_paginas=total_paginas, total=total
@@ -606,13 +613,7 @@ def register_routes(app):
     @app.route("/pendencias")
     @login_required
     def pendencias():
-        tipos = db.query("SELECT id, descricao, criticidade FROM tipos_pendencia WHERE ativo = TRUE ORDER BY descricao")
-        unidades = listar_unidades_integra() + listar_unidades_locais_opcoes()
-        profissionais = db.query("SELECT nome FROM profissionais WHERE ativo = TRUE ORDER BY nome")
-        return render_template(
-            "pendencias.html", tipos=tipos, unidades=unidades, profissionais=profissionais,
-            active_page="pendencias"
-        )
+        return render_template("pendencias.html", active_page="pendencias")
 
     def montar_contexto_analise(prontuario_id, destino_erro):
         """Monta o contexto compartilhado pelas paginas de analise de
@@ -632,15 +633,12 @@ def register_routes(app):
         exames = listar_exames_internacao(isn_internacao)
         resumo_exames = resumir_exames_por_nome(exames)
 
-        if historico_leitos:
-            unidades_pendencia = []
-            vistas = set()
-            for h in historico_leitos:
-                if h["isn_clinica"] is not None and h["isn_clinica"] not in vistas:
-                    vistas.add(h["isn_clinica"])
-                    unidades_pendencia.append({"id": int(h["isn_clinica"]), "nome": h["dsc_clinica"]})
-        else:
-            unidades_pendencia = listar_unidades_integra()
+        unidades_pendencia = []
+        vistas = set()
+        for h in historico_leitos:
+            if h["isn_clinica"] is not None and h["isn_clinica"] not in vistas:
+                vistas.add(h["isn_clinica"])
+                unidades_pendencia.append({"id": int(h["isn_clinica"]), "nome": h["dsc_clinica"]})
         unidades_pendencia += listar_unidades_locais_opcoes()
 
         min_data_ocorrencia = None
@@ -1215,7 +1213,51 @@ def register_routes(app):
     @app.route("/api/tipos-pendencia", methods=["GET"])
     @login_required
     def api_tipos_pendencia():
-        return jsonify(db.query("SELECT * FROM tipos_pendencia WHERE ativo = TRUE ORDER BY descricao"))
+        return jsonify(db.query("SELECT * FROM tipos_pendencia ORDER BY descricao"))
+
+    @app.route("/api/tipos-pendencia", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_criar_tipo_pendencia():
+        data = request.get_json(force=True)
+        descricao = (data.get("descricao") or "").strip()
+        if not descricao:
+            return jsonify({"erro": "descricao e obrigatoria"}), 400
+
+        novo = db.execute(
+            """INSERT INTO tipos_pendencia (descricao, setor_responsavel, criticidade)
+               VALUES (%s,%s,%s) RETURNING *""",
+            (descricao, data.get("setor_responsavel"), data.get("criticidade", "media"))
+        )
+        return jsonify(novo), 201
+
+    @app.route("/api/tipos-pendencia/<int:tipo_id>", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_tipo_pendencia(tipo_id):
+        data = request.get_json(force=True)
+        atualizado = db.execute(
+            """UPDATE tipos_pendencia
+               SET descricao=%s, setor_responsavel=%s, criticidade=%s, ativo=%s
+               WHERE id=%s RETURNING *""",
+            (data.get("descricao"), data.get("setor_responsavel"),
+             data.get("criticidade", "media"), data.get("ativo", True), tipo_id)
+        )
+        return jsonify(atualizado)
+
+    @app.route("/api/tipos-pendencia/<int:tipo_id>", methods=["DELETE"])
+    @login_required
+    @perfil_required("admin")
+    def api_excluir_tipo_pendencia(tipo_id):
+        db.execute("UPDATE tipos_pendencia SET ativo = FALSE WHERE id = %s", (tipo_id,))
+        return jsonify({"ok": True})
+
+    @app.route("/api/tipos-pendencia/<int:tipo_id>/ativar", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_ativar_tipo_pendencia(tipo_id):
+        db.execute("UPDATE tipos_pendencia SET ativo = TRUE WHERE id = %s", (tipo_id,))
+        return jsonify({"ok": True})
 
     # -----------------------------------------------------------
     # API - UNIDADES (consulta ao vivo no sistema hospitalar)
@@ -1255,12 +1297,43 @@ def register_routes(app):
         )
         return jsonify(nova), 201
 
+    @app.route("/api/unidades-locais/<int:unidade_id>", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_unidade_local(unidade_id):
+        data = request.get_json(force=True)
+        nome = (data.get("nome") or "").strip()
+        if not nome:
+            return jsonify({"erro": "nome e obrigatorio"}), 400
+
+        atualizada = db.execute(
+            "UPDATE unidades SET nome=%s, tipo=%s WHERE id=%s RETURNING *",
+            (nome, data.get("tipo"), unidade_id)
+        )
+        return jsonify(atualizada)
+
     @app.route("/api/unidades-locais/<int:unidade_id>", methods=["DELETE"])
     @login_required
     @perfil_required("admin")
     def api_desativar_unidade_local(unidade_id):
         db.execute("UPDATE unidades SET ativo = FALSE WHERE id = %s", (unidade_id,))
         return jsonify({"ok": True})
+
+    @app.route("/api/clinicas/<int:isn_clinica>/tipo", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_tipo_clinica(isn_clinica):
+        data = request.get_json(force=True)
+        tipo = (data.get("tipo") or "").strip() or None
+
+        atualizado = db.execute(
+            """INSERT INTO clinicas_tipo (isn_clinica, tipo, atualizado_em)
+               VALUES (%s, %s, NOW())
+               ON CONFLICT (isn_clinica) DO UPDATE SET tipo = EXCLUDED.tipo, atualizado_em = NOW()
+               RETURNING *""",
+            (isn_clinica, tipo)
+        )
+        return jsonify(atualizado)
 
     # -----------------------------------------------------------
     # API - PROFISSIONAIS (CRUD)
@@ -1283,10 +1356,12 @@ def register_routes(app):
 
         novo = db.execute(
             """INSERT INTO profissionais
-                (nome, categoria, conselho, numero_conselho, uf_conselho, telefone, email)
-               VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
+                (nome, categoria, conselho, numero_conselho, uf_conselho, telefone, email,
+                 isn_profissional, cbo)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
             (nome, categoria, data.get("conselho"), data.get("numero_conselho"),
-             data.get("uf_conselho"), data.get("telefone"), data.get("email"))
+             data.get("uf_conselho"), data.get("telefone"), data.get("email"),
+             data.get("isn_profissional") or None, data.get("cbo"))
         )
         return jsonify(novo), 201
 
@@ -1298,11 +1373,12 @@ def register_routes(app):
         atualizado = db.execute(
             """UPDATE profissionais
                SET nome=%s, categoria=%s, conselho=%s, numero_conselho=%s,
-                   uf_conselho=%s, telefone=%s, email=%s, ativo=%s
+                   uf_conselho=%s, telefone=%s, email=%s, isn_profissional=%s, cbo=%s, ativo=%s
                WHERE id=%s RETURNING *""",
             (data.get("nome"), data.get("categoria"), data.get("conselho"),
              data.get("numero_conselho"), data.get("uf_conselho"), data.get("telefone"),
-             data.get("email"), data.get("ativo", True), profissional_id)
+             data.get("email"), data.get("isn_profissional") or None, data.get("cbo"),
+             data.get("ativo", True), profissional_id)
         )
         return jsonify(atualizado)
 
