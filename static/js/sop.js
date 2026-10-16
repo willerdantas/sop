@@ -208,6 +208,7 @@ async function carregarAltas(pagina) {
     altasPaginaAtual = resp.pagina;
     altasCache = Object.fromEntries(lista.map((a) => [a.isn_internacao_leito, a]));
     contador.textContent = `${resp.total} pendente(s)`;
+    document.getElementById("kpi-total-altas").textContent = resp.total;
 
     paginacao.style.display = resp.total_paginas > 1 ? "flex" : "none";
     document.getElementById("altas-pagina-info").textContent = `Página ${resp.pagina} de ${resp.total_paginas}`;

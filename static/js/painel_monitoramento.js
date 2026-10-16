@@ -1,7 +1,8 @@
 /**
  * painel_monitoramento.js
  * Quantidade de prontuarios por status e analises (em andamento/concluidas)
- * por usuario, separadas entre SOP e Contas Medicas.
+ * por usuario. Compartilhado pelas paginas de monitoramento do SOP e de
+ * Contas Medicas - cada uma define PAINEL_MONITORAMENTO_URL com seu endpoint.
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -10,10 +11,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function carregarPainelMonitoramento() {
   try {
-    const dados = await apiFetch("/api/painel-monitoramento");
+    const dados = await apiFetch(PAINEL_MONITORAMENTO_URL);
     renderizarStatus(dados.por_status);
-    renderizarUsuarios("tbody-usuarios-sop", dados.usuarios_sop);
-    renderizarUsuarios("tbody-usuarios-contas", dados.usuarios_contas_medicas);
+    renderizarUsuarios(dados.usuarios);
   } catch (e) {
     document.getElementById("linha-kpis-status").innerHTML =
       `<div class="kpi-card"><div class="kpi-desc">Erro ao carregar: ${e.message}</div></div>`;
@@ -30,8 +30,8 @@ function renderizarStatus(lista) {
   `).join("");
 }
 
-function renderizarUsuarios(tbodyId, lista) {
-  const tbody = document.getElementById(tbodyId);
+function renderizarUsuarios(lista) {
+  const tbody = document.getElementById("tbody-usuarios-monitoramento");
   if (!lista.length) {
     tbody.innerHTML = `<tr><td colspan="3" class="vazio-estado">Nenhuma análise registrada ainda.</td></tr>`;
     return;

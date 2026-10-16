@@ -54,7 +54,7 @@ STATUS_LABEL = {
 # Altas (sistema hospitalar ISIVITA): isn_destino em t_destino -
 # 1 = Residencia, 3 = Outro hospital, 4 = Obito.
 ALTAS_DESTINOS_VALIDOS = (1, 3, 4)
-ALTAS_DATA_INICIO = "2026-10-01"
+ALTAS_DATA_INICIO = "2026-10-16"
 
 
 FUSO_HORARIO_HOSPITAL = ZoneInfo("America/Fortaleza")
@@ -501,7 +501,8 @@ PAGINAS_SELECIONAVEIS = [
     ("clinicas", "Clínicas"),
     ("profissionais", "Profissionais"),
     ("procedimentos", "Procedimentos (SIGTAP)"),
-    ("painel_monitoramento", "Painel de Monitoramento"),
+    ("painel_monitoramento_sop", "Monitoramento SOP"),
+    ("painel_monitoramento_contas_medicas", "Monitoramento Contas Médicas"),
 ]
 
 # Para cada endpoint controlado, quais paginas (qualquer uma delas) dao acesso.
@@ -515,7 +516,8 @@ ENDPOINT_PARA_PAGINAS = {
     "clinicas": ("clinicas",),
     "profissionais": ("profissionais",),
     "procedimentos": ("procedimentos",),
-    "painel_monitoramento": ("painel_monitoramento",),
+    "painel_monitoramento_sop": ("painel_monitoramento_sop",),
+    "painel_monitoramento_contas_medicas": ("painel_monitoramento_contas_medicas",),
     "analise_prontuario": ("sop",),
     "analise_unidade_prontuario": ("unidade",),
     "analise_c_medicas_prontuario": ("contas_medicas",),
@@ -537,7 +539,8 @@ ENDPOINT_PARA_PAGINAS = {
     "api_confirmar_pendencia": ("sop", "pendencias", "contas_medicas"),
     "api_devolver_pendencia": ("sop", "pendencias", "contas_medicas"),
     "api_painel": ("painel",),
-    "api_painel_monitoramento": ("painel_monitoramento",),
+    "api_painel_monitoramento_sop": ("painel_monitoramento_sop",),
+    "api_painel_monitoramento_contas_medicas": ("painel_monitoramento_contas_medicas",),
     "api_listar_profissionais": ("profissionais",),
     "api_listar_procedimentos_sigtap": ("procedimentos", "contas_medicas"),
     "api_listar_procedimentos_prontuario": ("sop", "unidade", "contas_medicas"),
@@ -819,10 +822,18 @@ def register_routes(app):
     def painel():
         return render_template("painel.html", active_page="painel")
 
-    @app.route("/painel-monitoramento")
+    @app.route("/painel-monitoramento-sop")
     @login_required
-    def painel_monitoramento():
-        return render_template("painel_monitoramento.html", active_page="painel_monitoramento")
+    def painel_monitoramento_sop():
+        return render_template("painel_monitoramento_sop.html", active_page="painel_monitoramento_sop")
+
+    @app.route("/painel-monitoramento-contas-medicas")
+    @login_required
+    def painel_monitoramento_contas_medicas():
+        return render_template(
+            "painel_monitoramento_contas_medicas.html",
+            active_page="painel_monitoramento_contas_medicas"
+        )
 
     @app.route("/profissionais")
     @login_required
@@ -1907,33 +1918,42 @@ def register_routes(app):
         })
 
     # -----------------------------------------------------------
-    # API - PAINEL DE MONITORAMENTO (quantidade por status e analises por usuario)
+    # API - PAINEIS DE MONITORAMENTO (quantidade por status e analises por usuario)
     # -----------------------------------------------------------
-    @app.route("/api/painel-monitoramento", methods=["GET"])
-    @login_required
-    def api_painel_monitoramento():
+    def montar_resumo_status_prontuarios():
         status_rows = db.query("SELECT status_atual, COUNT(*) AS total FROM prontuarios GROUP BY status_atual")
         status_mapa = {r["status_atual"]: r["total"] for r in status_rows}
-        por_status = [
+        return [
             {"status": chave, "label": STATUS_LABEL.get(chave, chave), "total": status_mapa.get(chave, 0)}
             for chave in FLUXO_ORDEM
         ]
 
-        usuarios_rows = db.query("""
-            SELECT u.nome, ap.etapa,
+    def buscar_usuarios_analise(etapa):
+        return db.query("""
+            SELECT u.nome,
                    COUNT(*) FILTER (WHERE ap.data_fim IS NULL) AS em_analise,
                    COUNT(*) FILTER (WHERE ap.data_fim IS NOT NULL) AS analisados
             FROM analises_prontuario ap
             JOIN usuarios u ON u.id = ap.usuario_id
-            WHERE ap.etapa IN ('sop', 'contas_medicas')
-            GROUP BY u.nome, ap.etapa
+            WHERE ap.etapa = %s
+            GROUP BY u.nome
             ORDER BY u.nome
-        """)
+        """, (etapa,))
 
+    @app.route("/api/painel-monitoramento-sop", methods=["GET"])
+    @login_required
+    def api_painel_monitoramento_sop():
         return jsonify({
-            "por_status": por_status,
-            "usuarios_sop": [r for r in usuarios_rows if r["etapa"] == "sop"],
-            "usuarios_contas_medicas": [r for r in usuarios_rows if r["etapa"] == "contas_medicas"],
+            "por_status": montar_resumo_status_prontuarios(),
+            "usuarios": buscar_usuarios_analise("sop"),
+        })
+
+    @app.route("/api/painel-monitoramento-contas-medicas", methods=["GET"])
+    @login_required
+    def api_painel_monitoramento_contas_medicas():
+        return jsonify({
+            "por_status": montar_resumo_status_prontuarios(),
+            "usuarios": buscar_usuarios_analise("contas_medicas"),
         })
 
     # -----------------------------------------------------------

@@ -5,6 +5,37 @@
 {% block subtitulo_pagina %}Recebimento, conferência, faturamento e auditoria{% endblock %}
 
 {% block conteudo %}
+<div class="painel-filtros">
+  <div class="campo">
+    <label>Nome do Paciente</label>
+    <input type="text" id="filtro-nome" placeholder="Buscar por nome">
+  </div>
+  <div class="campo">
+    <label>Nº Prontuário</label>
+    <input type="text" id="filtro-numero" placeholder="Buscar por número">
+  </div>
+  <div class="campo">
+    <label>Data Início</label>
+    <input type="date" id="filtro-data-inicio">
+  </div>
+  <div class="campo">
+    <label>Data Fim</label>
+    <input type="date" id="filtro-data-fim">
+  </div>
+  <div class="kpi-destaque">
+    <div class="kpi-label">EM CONTAS MÉDICAS AGORA</div>
+    <div class="kpi-valor" id="kpi-total-contas">--</div>
+  </div>
+  <div class="kpi-destaque">
+    <div class="kpi-label">EM FATURAMENTO</div>
+    <div class="kpi-valor" id="kpi-total-faturamento">--</div>
+  </div>
+  <div class="kpi-destaque">
+    <div class="kpi-label">EM AUDITORIA</div>
+    <div class="kpi-valor" id="kpi-total-auditoria">--</div>
+  </div>
+</div>
+
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Prontuários Enviados pelo SOP</h3>
@@ -119,5 +150,8 @@
 {% endblock %}
 
 {% block scripts_extra %}
+<script>
+  const USUARIO_PERFIL = {{ usuario_perfil | tojson }};
+</script>
 <script src="{{ url_for('static', filename='js/contas_medicas.js') }}"></script>
 {% endblock %}

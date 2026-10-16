@@ -63,9 +63,14 @@
         {{ icons.icone('activity') }} <span>Painel Tempo Real</span>
       </a>
       {% endif %}
-      {% if 'painel_monitoramento' in paginas_permitidas %}
-      <a class="sidebar-item {{ 'ativo' if active_page=='painel_monitoramento' }}" href="{{ url_for('painel_monitoramento') }}" data-nav>
-        {{ icons.icone('check') }} <span>Monitoramento</span>
+      {% if 'painel_monitoramento_sop' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='painel_monitoramento_sop' }}" href="{{ url_for('painel_monitoramento_sop') }}" data-nav>
+        {{ icons.icone('check') }} <span>Monitoramento SOP</span>
+      </a>
+      {% endif %}
+      {% if 'painel_monitoramento_contas_medicas' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='painel_monitoramento_contas_medicas' }}" href="{{ url_for('painel_monitoramento_contas_medicas') }}" data-nav>
+        {{ icons.icone('check') }} <span>Monitoramento Contas Médicas</span>
       </a>
       {% endif %}
       {% if 'clinicas' in paginas_permitidas %}
