@@ -115,7 +115,13 @@ CREATE TABLE IF NOT EXISTS prontuarios (
     localizacao_fisica VARCHAR(120),          -- prateleira/armario/setor onde esta fisicamente
     integra_isn_internacao_leito BIGINT UNIQUE, -- isn_internacao_leito de origem (altas ISIVITA), evita reimportar
     recebido_contas_medicas_em TIMESTAMP, -- confirmacao de entrega ao chegar em contas_medicas (null = aguardando)
+    recebido_contas_medicas_usuario_id INTEGER REFERENCES usuarios(id), -- quem confirmou a entrega
     recebido_unidade_em TIMESTAMP, -- confirmacao de entrega ao chegar na unidade vindo do SOP (null = aguardando)
+    dias_enfermaria     INTEGER, -- dias de internacao em enfermaria p/ faturamento (null = usar somatorio calculado)
+    dias_uti            INTEGER, -- dias de internacao em UTI p/ faturamento (null = usar somatorio calculado)
+    diaria_acompanhante INTEGER, -- dias de diaria de acompanhante p/ faturamento (null = usar somatorio calculado)
+    auditoria_analisado_em TIMESTAMP, -- quando alguem clicou Analisar estando em auditoria
+    auditoria_analisado_usuario_id INTEGER REFERENCES usuarios(id), -- quem analisou em auditoria
     criado_em          TIMESTAMP NOT NULL DEFAULT NOW(),
     atualizado_em       TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -123,7 +129,13 @@ CREATE TABLE IF NOT EXISTS prontuarios (
 ALTER TABLE prontuarios DROP CONSTRAINT IF EXISTS prontuarios_unidade_id_fkey;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS integra_isn_internacao_leito BIGINT UNIQUE;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_contas_medicas_em TIMESTAMP;
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_contas_medicas_usuario_id INTEGER REFERENCES usuarios(id);
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_unidade_em TIMESTAMP;
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS dias_enfermaria INTEGER;
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS dias_uti INTEGER;
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS diaria_acompanhante INTEGER;
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS auditoria_analisado_em TIMESTAMP;
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS auditoria_analisado_usuario_id INTEGER REFERENCES usuarios(id);
 
 -- Prontuarios ja existentes na unidade antes desta coluna existir nao vieram
 -- de um envio do SOP aguardando confirmacao: marca como ja recebidos.
@@ -195,6 +207,44 @@ ALTER TABLE profissionais ADD COLUMN IF NOT EXISTS cbo VARCHAR(20);
 
 CREATE INDEX IF NOT EXISTS idx_pendencias_prontuario ON pendencias(prontuario_id);
 CREATE INDEX IF NOT EXISTS idx_pendencias_status ON pendencias(status);
+
+-- ---------------------------------------------------------
+-- PROCEDIMENTOS (catalogo SIGTAP e procedimentos incluidos em um prontuario)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS procedimentos_sigtap (
+    id              SERIAL PRIMARY KEY,
+    codigo          VARCHAR(20) NOT NULL UNIQUE,  -- codigo SIGTAP, ex: 0301010015
+    descricao       VARCHAR(255) NOT NULL,
+    ativo           BOOLEAN NOT NULL DEFAULT TRUE,
+    criado_em       TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS prontuario_procedimentos (
+    id              SERIAL PRIMARY KEY,
+    prontuario_id   INTEGER NOT NULL REFERENCES prontuarios(id) ON DELETE CASCADE,
+    procedimento_id INTEGER NOT NULL REFERENCES procedimentos_sigtap(id),
+    quantidade      INTEGER NOT NULL DEFAULT 1,
+    usuario_id      INTEGER REFERENCES usuarios(id),
+    criado_em       TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_prontuario_procedimentos_prontuario ON prontuario_procedimentos(prontuario_id);
+
+-- ---------------------------------------------------------
+-- ANALISES DE PRONTUARIO (sessoes de analise no SOP e em Contas Medicas,
+-- para o painel de monitoramento: quem esta analisando e quem ja analisou)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS analises_prontuario (
+    id              SERIAL PRIMARY KEY,
+    prontuario_id   INTEGER NOT NULL REFERENCES prontuarios(id) ON DELETE CASCADE,
+    usuario_id      INTEGER REFERENCES usuarios(id),
+    etapa           VARCHAR(20) NOT NULL,   -- sop, contas_medicas
+    data_inicio     TIMESTAMP NOT NULL DEFAULT NOW(),
+    data_fim        TIMESTAMP               -- null = analise ainda em andamento
+);
+
+CREATE INDEX IF NOT EXISTS idx_analises_prontuario_prontuario ON analises_prontuario(prontuario_id);
+CREATE INDEX IF NOT EXISTS idx_analises_prontuario_abertas ON analises_prontuario(prontuario_id, etapa) WHERE data_fim IS NULL;
 
 -- ---------------------------------------------------------
 -- Trigger simples para atualizar atualizado_em em prontuarios

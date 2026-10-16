@@ -9,6 +9,7 @@ let pendenciasAbertasCount = 0;
 document.addEventListener("DOMContentLoaded", () => {
   carregarPendencias();
   carregarHistorico();
+  carregarProcedimentos();
 
   document.getElementById("btn-nova-pendencia").addEventListener("click", () => abrirModal("modal-nova-pendencia"));
 
@@ -176,5 +177,27 @@ async function carregarHistorico() {
     `).join("");
   } catch (e) {
     container.innerHTML = `<p class="vazio-estado">Erro: ${e.message}</p>`;
+  }
+}
+
+async function carregarProcedimentos() {
+  const tbody = document.getElementById("tbody-procedimentos-analise");
+  try {
+    const lista = await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/procedimentos`);
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Nenhum procedimento incluído.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = lista.map((p) => `
+      <tr>
+        <td><strong>${p.codigo}</strong></td>
+        <td>${p.descricao}</td>
+        <td>${p.quantidade}</td>
+        <td>${formatarData(p.criado_em)}</td>
+        <td>${p.usuario_nome || "-"}</td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }

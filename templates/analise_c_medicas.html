@@ -14,6 +14,13 @@
     <h3>Dados do Prontuário</h3>
     <div class="acoes-linha">
       <button class="btn btn-primario btn-sm" id="btn-enviar-sop">Devolver para o SOP</button>
+      {% if prontuario.status_atual == 'pronto_faturamento' %}
+      <button class="btn btn-outline btn-sm" id="btn-enviar-auditoria">Enviar para Auditoria</button>
+      <button class="btn btn-secundario btn-sm" id="btn-prontuario-faturado">Prontuário Faturado</button>
+      {% endif %}
+      {% if prontuario.status_atual == 'auditoria' %}
+      <button class="btn btn-outline btn-sm" id="btn-enviar-faturamento">Enviar para Faturamento</button>
+      {% endif %}
     </div>
   </div>
   <div class="form-grid mt-16">
@@ -30,8 +37,24 @@
       <span>{{ prontuario.paciente_nome }}</span>
     </div>
     <div class="info-item">
-      <label>Matrícula</label>
-      <span>{{ prontuario.paciente_matricula or "-" }}</span>
+      <label>Data de Nascimento</label>
+      <span>{{ dat_nascimento.strftime('%d/%m/%Y') if dat_nascimento else "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>Idade</label>
+      <span>{% if idade %}{{ idade.anos }}a {{ idade.meses }}m {{ idade.dias }}d{% else %}-{% endif %}</span>
+    </div>
+    <div class="info-item">
+      <label>Nome da Mãe</label>
+      <span>{{ dsc_mae or "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>CPF</label>
+      <span>{{ num_cpf or "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>CNS</label>
+      <span>{{ num_cns or "-" }}</span>
     </div>
     <div class="info-item">
       <label>Unidade de Origem</label>
@@ -53,10 +76,32 @@
       <label>Data de Alta</label>
       <span>{{ prontuario.data_alta or "-" }}</span>
     </div>
-    <div class="info-item">
-      <label>Localização Física</label>
-      <span>{{ prontuario.localizacao_fisica or "-" }}</span>
-    </div>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>CID</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>CID10</th>
+          <th>Descrição</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in cids %}
+        <tr>
+          <td>{{ "Principal" if c.primario == "S" else "Secundário" }}</td>
+          <td>{{ c.cod_cid10 or "-" }}</td>
+          <td>{{ c.dsc_cid10 or "-" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="vazio-estado">Nenhum CID registrado para esta internação.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -89,6 +134,27 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <div class="form-grid mt-16">
+    <div class="campo" style="display:flex; align-items:center; gap:10px;">
+      <label style="margin-bottom:0; white-space:nowrap;">Dias de Enfermaria</label>
+      <input type="number" min="0" id="input-dias-enfermaria"
+             value="{{ prontuario.dias_enfermaria if prontuario.dias_enfermaria is not none else dias_enfermaria_calc }}">
+    </div>
+    <div class="campo" style="display:flex; align-items:center; gap:10px;">
+      <label style="margin-bottom:0; white-space:nowrap;">Dias de UTI</label>
+      <input type="number" min="0" id="input-dias-uti"
+             value="{{ prontuario.dias_uti if prontuario.dias_uti is not none else dias_uti_calc }}">
+    </div>
+    <div class="campo" style="display:flex; align-items:center; gap:10px;">
+      <label style="margin-bottom:0; white-space:nowrap;">Diária de Acompanhante</label>
+      <input type="number" min="0" id="input-diaria-acompanhante"
+             value="{{ prontuario.diaria_acompanhante if prontuario.diaria_acompanhante is not none else dias_enfermaria_calc }}">
+    </div>
+    <div class="campo" style="display:flex; align-items:center;">
+      <button type="button" class="btn btn-primario" id="btn-salvar-valores-faturamento">Salvar Valores</button>
+    </div>
   </div>
 </div>
 
@@ -146,6 +212,58 @@
       </table>
     </div>
   </details>
+</div>
+
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Procedimentos</h3>
+    <button class="btn btn-laranja btn-sm" id="btn-incluir-procedimento" type="button">
+      {{ icons.icone('plus') }} Incluir Procedimento
+    </button>
+  </div>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Código SIGTAP</th>
+          <th>Descrição</th>
+          <th>Quantidade</th>
+          <th>Incluído em</th>
+          <th>Incluído por</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-procedimentos-analise">
+        <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal incluir procedimento -->
+<div class="modal-fundo" id="modal-incluir-procedimento">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-incluir-procedimento">{{ icons.icone('x') }}</button>
+    <h3>Incluir Procedimento</h3>
+    <form id="form-incluir-procedimento">
+      <input type="hidden" name="procedimento_id" id="input-procedimento-id">
+      <div class="form-grid">
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Procedimento *</label>
+          <input type="text" id="input-busca-procedimento" placeholder="Digite o código ou a descrição" autocomplete="off" required>
+          <div id="resultados-procedimento" class="texto-suave" style="margin-top:6px; max-height:180px; overflow-y:auto;"></div>
+        </div>
+        <div class="campo">
+          <label>Quantidade</label>
+          <input type="number" name="quantidade" id="input-quantidade-procedimento" min="1" value="1">
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-incluir-procedimento">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Incluir</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <div class="card-branco">
