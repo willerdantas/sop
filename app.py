@@ -54,7 +54,7 @@ STATUS_LABEL = {
 # Altas (sistema hospitalar ISIVITA): isn_destino em t_destino -
 # 1 = Residencia, 3 = Outro hospital, 4 = Obito.
 ALTAS_DESTINOS_VALIDOS = (1, 3, 4)
-ALTAS_DATA_INICIO = "2026-10-16"
+ALTAS_DATA_INICIO = "2026-10-15"
 
 
 FUSO_HORARIO_HOSPITAL = ZoneInfo("America/Fortaleza")
