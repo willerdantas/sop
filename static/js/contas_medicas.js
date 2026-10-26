@@ -47,7 +47,7 @@ async function carregarAguardando() {
     contador.textContent = `${aguardando.length} pendente(s)`;
 
     if (!aguardando.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhum prontuário aguardando confirmação.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhum prontuário aguardando confirmação.</td></tr>`;
       return;
     }
 
@@ -60,13 +60,14 @@ async function carregarAguardando() {
             ? `<span class="badge badge-pendencia">${p.pendencias_abertas} aberta(s)</span>`
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
         <td>${formatarData(p.atualizado_em)}</td>
+        <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td class="acoes-linha">
           <button class="btn btn-primario btn-sm" onclick="confirmarRecebimento(${p.id})">Confirmar Entrega</button>
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
@@ -89,7 +90,7 @@ async function carregarContas() {
     document.getElementById("kpi-total-contas").textContent = lista.length;
 
     if (!confirmados.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhum prontuário confirmado em Contas Médicas.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário confirmado em Contas Médicas.</td></tr>`;
       return;
     }
 
@@ -103,13 +104,14 @@ async function carregarContas() {
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
         <td>${formatarData(p.recebido_contas_medicas_em)}</td>
         <td>${p.recebido_contas_medicas_usuario_nome || "-"}</td>
+        <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td class="acoes-linha">
           <button class="btn btn-outline btn-sm" onclick="analisarEMigrarFaturamento(${p.id})">Analisar</button>
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
@@ -131,7 +133,7 @@ async function carregarFaturamento() {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("pronto_faturamento").toString()}`);
     document.getElementById("kpi-total-faturamento").textContent = lista.length;
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhum prontuário pronto para faturamento.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhum prontuário pronto para faturamento.</td></tr>`;
       return;
     }
 
@@ -142,6 +144,7 @@ async function carregarFaturamento() {
         <td>${p.unidade_nome || "-"}</td>
         <td>${formatarData(p.atualizado_em)}</td>
         <td>${p.faturamento_usuario_nome || "-"}</td>
+        <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td class="acoes-linha">
           ${USUARIO_PERFIL === "auditor_c_med" ? "-" : `
           <button class="btn btn-outline btn-sm" onclick="location.href='/analise_c_medicas/${p.id}'">Analisar</button>
@@ -153,7 +156,7 @@ async function carregarFaturamento() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
@@ -225,7 +228,7 @@ async function carregarAuditoria() {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("auditoria").toString()}`);
     document.getElementById("kpi-total-auditoria").textContent = lista.length;
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhum prontuário em auditoria.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário em auditoria.</td></tr>`;
       return;
     }
 
@@ -237,6 +240,7 @@ async function carregarAuditoria() {
         <td>${formatarData(p.atualizado_em)}</td>
         <td>${p.auditoria_analisado_em ? formatarData(p.auditoria_analisado_em) : "-"}</td>
         <td>${p.auditoria_analisado_usuario_nome || "-"}</td>
+        <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td class="acoes-linha">
           ${USUARIO_PERFIL === "faturista" ? "-" : `
           <button class="btn btn-outline btn-sm" onclick="analisarAuditoria(${p.id})">Analisar</button>
@@ -246,7 +250,7 @@ async function carregarAuditoria() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 

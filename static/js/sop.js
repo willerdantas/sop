@@ -72,7 +72,7 @@ async function carregarSOP() {
     renderizarTabela(lista);
     atualizarKpis(lista);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
@@ -133,7 +133,7 @@ async function registrarInternacao(isnInternacaoLeito) {
 function renderizarTabela(lista) {
   const tbody = document.getElementById("tbody-sop");
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário no SOP no momento.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Nenhum prontuário no SOP no momento.</td></tr>`;
     return;
   }
 
@@ -149,6 +149,7 @@ function renderizarTabela(lista) {
           : `<span class="badge badge-ok">Sem pendência</span>`}</td>
       <td>${formatarData(p.atualizado_em)}</td>
       <td>${formatarTimerSOP(p.horas_uteis_no_sop)}</td>
+      <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
       <td class="acoes-linha">
         <button class="btn btn-outline btn-sm" onclick="location.href='/analise/${p.id}'">Analisar</button>
         <button class="btn btn-outline btn-sm" onclick="enviarParaUnidade(${p.id})">Enviar p/ Unidade</button>

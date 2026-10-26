@@ -247,6 +247,17 @@ CREATE INDEX IF NOT EXISTS idx_analises_prontuario_prontuario ON analises_prontu
 CREATE INDEX IF NOT EXISTS idx_analises_prontuario_abertas ON analises_prontuario(prontuario_id, etapa) WHERE data_fim IS NULL;
 
 -- ---------------------------------------------------------
+-- EXAME CLASSIFICACAO (classificacao manual dos exames do ISIVITA por
+-- isn_exame, importada de exame_classificacao.csv - usada para agrupar o
+-- Resumo de Exames nas paginas de analise por classificacao, nao por nome)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS exame_classificacao (
+    isn_exame           BIGINT PRIMARY KEY,
+    classificacao       VARCHAR(60) NOT NULL,
+    dat_classificacao   TIMESTAMP
+);
+
+-- ---------------------------------------------------------
 -- Trigger simples para atualizar atualizado_em em prontuarios
 -- ---------------------------------------------------------
 CREATE OR REPLACE FUNCTION trg_set_atualizado_em()

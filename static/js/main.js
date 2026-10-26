@@ -185,6 +185,24 @@ function formatarTimerSOP(horas) {
   return formatarTimer(horas, 48, null);
 }
 
+/**
+ * Etiqueta de dias desde a alta do prontuario:
+ * ate 30d verde/branco, 30-60d amarelo/preto, 60-80d laranja/preto,
+ * 80-90d vermelho/branco, acima de 90d preto/branco.
+ */
+function badgeDiasAlta(dias) {
+  if (dias === null || dias === undefined) return "-";
+
+  let fundo, cor;
+  if (dias <= 30) { fundo = "#2E7D32"; cor = "#fff"; }
+  else if (dias <= 60) { fundo = "#F2C94C"; cor = "#000"; }
+  else if (dias <= 80) { fundo = "#F2994A"; cor = "#000"; }
+  else if (dias <= 90) { fundo = "#D64545"; cor = "#fff"; }
+  else { fundo = "#000"; cor = "#fff"; }
+
+  return `<span class="badge" style="background:${fundo}; color:${cor};">${dias} dia${dias === 1 ? "" : "s"}</span>`;
+}
+
 const STATUS_BADGE_CLASSE = {
   unidade: "badge-unidade",
   sop: "badge-sop",

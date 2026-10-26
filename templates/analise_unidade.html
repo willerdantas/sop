@@ -136,26 +136,31 @@
 
 <div class="card-branco">
   <h3>Resumo de Exames</h3>
-  <div class="tabela-wrap">
-    <table class="tabela-padrao">
-      <thead>
-        <tr>
-          <th>Exame</th>
-          <th>Quantidade</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in resumo_exames %}
-        <tr>
-          <td>{{ r.nome }}</td>
-          <td>{{ r.quantidade }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="2" class="vazio-estado">Nenhum exame encontrado para esta internação.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  {% for r in resumo_exames %}
+  <details class="secao-recolhivel" style="margin-bottom:10px;">
+    <summary><strong>{{ r.nome }}</strong> &middot; {{ r.quantidade }} exame(s)</summary>
+    <div class="tabela-wrap" style="margin-top:12px;">
+      <table class="tabela-padrao">
+        <thead>
+          <tr>
+            <th>Exame</th>
+            <th>Quantidade</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ex in r.exames %}
+          <tr>
+            <td>{{ ex.nome }}</td>
+            <td>{{ ex.quantidade }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% else %}
+  <p class="vazio-estado">Nenhum exame encontrado para esta internação.</p>
+  {% endfor %}
 </div>
 
 <div class="card-branco">

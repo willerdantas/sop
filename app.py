@@ -287,7 +287,7 @@ def listar_exames_internacao(isn_internacao):
     if not isn_internacao:
         return []
     return db.query_integra(
-        """SELECT ex.dsc_exame,
+        """SELECT es.isn_exame, ex.dsc_exame,
                   es.dat_solicitacao, es.dat_agendamento,
                   es.dat_realizacao, es.dat_cancelamento
            FROM integra_local.t_internacao i
@@ -299,16 +299,40 @@ def listar_exames_internacao(isn_internacao):
     )
 
 
-def resumir_exames_por_nome(exames):
-    """Agrupa a lista de exames por nome, contando quantos houve de cada um."""
-    contagem = {}
+def resumir_exames_por_classificacao(exames):
+    """Agrupa a lista de exames pela classificacao cadastrada em
+    exame_classificacao (local, por isn_exame). Dentro de cada classificacao,
+    resume por nome de exame, contando quantas vezes cada um aparece no
+    historico (sem trazer datas individuais)."""
+    isn_exames = [int(ex["isn_exame"]) for ex in exames if ex.get("isn_exame") is not None]
+    mapa_classificacao = {}
+    if isn_exames:
+        rows = db.query(
+            "SELECT isn_exame, classificacao FROM exame_classificacao WHERE isn_exame = ANY(%s)",
+            (isn_exames,)
+        )
+        mapa_classificacao = {r["isn_exame"]: r["classificacao"] for r in rows}
+
+    grupos = {}
     for ex in exames:
-        nome = ex["dsc_exame"] or "Sem nome"
-        contagem[nome] = contagem.get(nome, 0) + 1
-    return sorted(
-        [{"nome": nome, "quantidade": qtd} for nome, qtd in contagem.items()],
-        key=lambda r: r["nome"]
-    )
+        isn = int(ex["isn_exame"]) if ex.get("isn_exame") is not None else None
+        classificacao = mapa_classificacao.get(isn) or "Sem classificação"
+        nome_exame = ex["dsc_exame"] or "Sem nome"
+        contagem_exames = grupos.setdefault(classificacao, {})
+        contagem_exames[nome_exame] = contagem_exames.get(nome_exame, 0) + 1
+
+    resultado = []
+    for classificacao, contagem_exames in grupos.items():
+        exames_resumidos = sorted(
+            [{"nome": nome, "quantidade": qtd} for nome, qtd in contagem_exames.items()],
+            key=lambda r: r["nome"]
+        )
+        resultado.append({
+            "nome": classificacao,
+            "quantidade": sum(contagem_exames.values()),
+            "exames": exames_resumidos,
+        })
+    return sorted(resultado, key=lambda r: r["nome"])
 
 
 def iniciar_analise(prontuario_id, etapa):
@@ -755,7 +779,7 @@ def register_routes(app):
         anexar_unidade_nome(prontuario)
         isn_internacao, historico_leitos = historico_internacao(prontuario.get("integra_isn_internacao_leito"))
         exames = listar_exames_internacao(isn_internacao)
-        resumo_exames = resumir_exames_por_nome(exames)
+        resumo_exames = resumir_exames_por_classificacao(exames)
 
         unidades_pendencia = []
         vistas = set()
@@ -915,6 +939,8 @@ def register_routes(app):
                 row["horas_uteis_na_unidade"] = round(horas_uteis_decorridas(row["recebido_unidade_em"], agora), 2)
             else:
                 row["horas_uteis_na_unidade"] = None
+
+            row["dias_desde_alta"] = (agora.date() - row["data_alta"]).days if row["data_alta"] else None
 
         return jsonify(rows)
 
