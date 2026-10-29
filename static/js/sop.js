@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btn-altas-anterior").addEventListener("click", () => carregarAltas(altasPaginaAtual - 1));
   document.getElementById("btn-altas-proxima").addEventListener("click", () => carregarAltas(altasPaginaAtual + 1));
+  document.getElementById("filtro-prazo-altas").addEventListener("change", () => carregarAltas(1));
 
   document.getElementById("btn-novo-prontuario").addEventListener("click", () => {
     document.getElementById("form-buscar-internacao").reset();
@@ -204,7 +205,10 @@ async function carregarAltas(pagina) {
   const contador = document.getElementById("contador-altas");
   const paginacao = document.getElementById("paginacao-altas");
   try {
-    const resp = await apiFetch(`/api/altas?pagina=${pagina}`);
+    const prazo = document.getElementById("filtro-prazo-altas").value;
+    const params = new URLSearchParams({ pagina });
+    if (prazo) params.set("prazo", prazo);
+    const resp = await apiFetch(`/api/altas?${params.toString()}`);
     const lista = resp.itens;
     altasPaginaAtual = resp.pagina;
     altasCache = Object.fromEntries(lista.map((a) => [a.isn_internacao_leito, a]));
@@ -217,7 +221,7 @@ async function carregarAltas(pagina) {
     document.getElementById("btn-altas-proxima").disabled = resp.pagina >= resp.total_paginas;
 
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Nenhuma alta pendente de registro.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" class="vazio-estado">Nenhuma alta pendente de registro.</td></tr>`;
       return;
     }
 
@@ -232,6 +236,7 @@ async function carregarAltas(pagina) {
         <td><span class="badge ${DESTINO_BADGE_CLASSE[a.dsc_destino] || "badge-unidade"}">${a.dsc_destino || "-"}</span></td>
         <td>${a.dsc_motivo_alta || "-"}</td>
         <td>${formatarTimerHorasUteis(a.horas_uteis_desde_alta)}</td>
+        <td>${badgeDiasAlta(a.dias_desde_alta)}</td>
         <td class="acoes-linha">
           ${a.num_prontuario
             ? `<button class="btn btn-laranja btn-sm" onclick="abrirModalRegistrarAlta(${a.isn_internacao_leito})">Registrar no Fluxo</button>`
@@ -240,7 +245,7 @@ async function carregarAltas(pagina) {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 

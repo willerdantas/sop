@@ -58,6 +58,17 @@
   <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
     Altas recebidas do sistema hospitalar (Residência, Outro hospital ou Óbito) ainda não registradas no fluxo.
   </p>
+  <div class="campo" style="max-width:260px; margin-bottom:16px;">
+    <label>Filtrar por Prazo</label>
+    <select id="filtro-prazo-altas">
+      <option value="">Todos</option>
+      <option value="30">Até 30 dias</option>
+      <option value="60">Até 60 dias</option>
+      <option value="80">Até 80 dias</option>
+      <option value="90">Até 90 dias</option>
+      <option value="90+">Acima de 90 dias</option>
+    </select>
+  </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">
       <thead>
@@ -71,11 +82,12 @@
           <th>Destino</th>
           <th>Motivo Alta</th>
           <th>Tempo</th>
+          <th>Dias desde Alta</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody-altas">
-        <tr><td colspan="10" class="vazio-estado">Carregando...</td></tr>
+        <tr><td colspan="11" class="vazio-estado">Carregando...</td></tr>
       </tbody>
     </table>
   </div>

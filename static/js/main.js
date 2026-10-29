@@ -241,3 +241,49 @@ function badgeStatusPendencia(status) {
   };
   return mapa[status] || status;
 }
+
+/**
+ * Campo de busca de profissional cadastrado (usado no registro de
+ * pendencias no SOP e em Contas Medicas). So aceita um profissional
+ * selecionado na lista de resultados - texto livre nao e submetido.
+ * Espera os elementos #input-busca-profissional, #input-profissional-selecionado
+ * e #resultados-profissional, alem do array global PROFISSIONAIS_CADASTRADOS.
+ */
+function configurarBuscaProfissional() {
+  const inputBusca = document.getElementById("input-busca-profissional");
+  const inputSelecionado = document.getElementById("input-profissional-selecionado");
+  const resultados = document.getElementById("resultados-profissional");
+  if (!inputBusca) return;
+
+  inputBusca.addEventListener("input", () => {
+    inputSelecionado.value = "";
+    const valor = inputBusca.value.trim().toLowerCase();
+    if (!valor) {
+      resultados.innerHTML = "";
+      return;
+    }
+    const encontrados = PROFISSIONAIS_CADASTRADOS.filter((nome) => nome.toLowerCase().includes(valor));
+    if (!encontrados.length) {
+      resultados.innerHTML = `<div>Nenhum profissional encontrado.</div>`;
+      return;
+    }
+    resultados.innerHTML = encontrados.map((nome) => `
+      <div style="padding:6px 0; cursor:pointer; border-bottom:1px solid var(--cor-borda);"
+           onclick="selecionarProfissional(${JSON.stringify(nome)})">${nome}</div>
+    `).join("");
+  });
+}
+
+function selecionarProfissional(nome) {
+  document.getElementById("input-busca-profissional").value = nome;
+  document.getElementById("input-profissional-selecionado").value = nome;
+  document.getElementById("resultados-profissional").innerHTML = "";
+}
+
+function limparBuscaProfissional() {
+  const inputBusca = document.getElementById("input-busca-profissional");
+  if (!inputBusca) return;
+  inputBusca.value = "";
+  document.getElementById("input-profissional-selecionado").value = "";
+  document.getElementById("resultados-profissional").innerHTML = "";
+}

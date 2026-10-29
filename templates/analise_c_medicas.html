@@ -336,7 +336,9 @@
         </div>
         <div class="campo">
           <label>Profissional *</label>
-          <input type="text" name="profissional" required placeholder="Nome do profissional envolvido" list="lista-profissionais" autocomplete="off">
+          <input type="text" id="input-busca-profissional" placeholder="Digite para buscar o profissional cadastrado" autocomplete="off" required>
+          <input type="hidden" name="profissional" id="input-profissional-selecionado">
+          <div id="resultados-profissional" class="texto-suave" style="margin-top:6px; max-height:160px; overflow-y:auto;"></div>
         </div>
         <div class="campo">
           <label>Data da Ocorrência *</label>
@@ -356,11 +358,6 @@
         <button type="button" class="btn btn-ghost" data-fechar-modal="modal-nova-pendencia">Cancelar</button>
         <button type="submit" class="btn btn-primario">Salvar Pendência</button>
       </div>
-      <datalist id="lista-profissionais">
-        {% for p in profissionais %}
-        <option value="{{ p.nome }}">
-        {% endfor %}
-      </datalist>
     </form>
   </div>
 </div>
@@ -369,6 +366,7 @@
 {% block scripts_extra %}
 <script>
   const PRONTUARIO_ID = {{ prontuario.id }};
+  const PROFISSIONAIS_CADASTRADOS = {{ profissionais | map(attribute='nome') | list | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/analise_c_medicas.js') }}"></script>
 {% endblock %}

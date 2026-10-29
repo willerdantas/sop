@@ -373,6 +373,24 @@ def somar_dias_por_tipo_internacao(historico_leitos):
     return dias_enfermaria, dias_uti
 
 
+def dentro_do_filtro_prazo(dias, filtro):
+    """Verifica se 'dias' (dias desde a alta) cai na faixa escolhida no filtro
+    de prazo, usando as mesmas faixas da etiqueta colorida (badgeDiasAlta)."""
+    if dias is None:
+        return False
+    if filtro == "30":
+        return dias <= 30
+    if filtro == "60":
+        return 30 < dias <= 60
+    if filtro == "80":
+        return 60 < dias <= 80
+    if filtro == "90":
+        return 80 < dias <= 90
+    if filtro == "90+":
+        return dias > 90
+    return True
+
+
 def listar_altas_pendentes():
     """Altas (destino 1/3/4, internacao real) ainda nao registradas no fluxo,
     com as horas uteis decorridas desde a alta."""
@@ -439,6 +457,7 @@ def listar_altas_pendentes():
             "num_prontuario": (a["num_prontuario"] or "").strip(),
             "paciente_nome": a["paciente_nome"],
             "horas_uteis_desde_alta": round(horas_uteis, 2),
+            "dias_desde_alta": (agora.date() - a["dat_alta"]).days if a["dat_alta"] else None,
         })
     return pendentes
 
@@ -1118,8 +1137,11 @@ def register_routes(app):
             pagina = max(1, int(request.args.get("pagina", 1)))
         except ValueError:
             pagina = 1
+        prazo = request.args.get("prazo")
 
         pendentes = listar_altas_pendentes()
+        if prazo:
+            pendentes = [a for a in pendentes if dentro_do_filtro_prazo(a["dias_desde_alta"], prazo)]
         total = len(pendentes)
         total_paginas = max(1, (total + POR_PAGINA - 1) // POR_PAGINA)
         pagina = min(pagina, total_paginas)

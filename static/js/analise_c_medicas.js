@@ -13,11 +13,19 @@ document.addEventListener("DOMContentLoaded", () => {
   carregarPendencias();
   carregarHistorico();
   carregarProcedimentos();
+  configurarBuscaProfissional();
 
-  document.getElementById("btn-nova-pendencia").addEventListener("click", () => abrirModal("modal-nova-pendencia"));
+  document.getElementById("btn-nova-pendencia").addEventListener("click", () => {
+    limparBuscaProfissional();
+    abrirModal("modal-nova-pendencia");
+  });
 
   document.getElementById("form-nova-pendencia").addEventListener("submit", async (ev) => {
     ev.preventDefault();
+    if (!document.getElementById("input-profissional-selecionado").value) {
+      alert("Selecione um profissional cadastrado na lista de resultados.");
+      return;
+    }
     const form = ev.target;
     const dados = Object.fromEntries(new FormData(form).entries());
     dados.prontuario_id = PRONTUARIO_ID;
@@ -26,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
       await apiFetch("/api/pendencias", { method: "POST", body: JSON.stringify(dados) });
       fecharModal("modal-nova-pendencia");
       form.reset();
+      limparBuscaProfissional();
       carregarPendencias();
     } catch (e) {
       alert(e.message);
