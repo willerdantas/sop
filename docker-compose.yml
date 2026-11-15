@@ -40,3 +40,35 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+  # Ambiente de homologacao/treinamento: mesma aplicacao, banco local
+  # separado ("sop_homol", mesmo servidor/credenciais do banco principal,
+  # so o nome do banco muda) para nao misturar dados de treino com os
+  # reais. O banco do sistema hospitalar (INTEGRA_DATABASE_URL) e o MESMO
+  # de producao (somente leitura, dados reais para praticar).
+  #
+  # "sop_homol" e criado automaticamente (banco + tabelas) no primeiro
+  # start, pelo bootstrap do proprio app (db.preparar_banco) - nao precisa
+  # criar a mao. SECRET_KEY e diferente da producao de proposito, para as
+  # sessoes de um ambiente nao valerem no outro.
+  web_homolog:
+    image: python:3.11-slim
+    container_name: prontuarios_hm_homolog
+    working_dir: /app
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      AMBIENTE: "homolog"
+      SECRET_KEY: "7d15ef264b9b5e760651dcb9af617082fafa75c65395cfdb3bb481ebc7d350e1"
+      DATABASE_URL: gAAAAABq-fYZ6RZ3THTsi16DxvUdcAuyEboz6R0qFYo_WVOWLoP1TYAYx3whIvoNmmslWCas2yPEXR3lK6_dlwYlynNP9ileessEqGbIpCM_ZNDxVUk7P6fy4QDRvqaup4V0LNi0nEl7u6Nw8Jwl6Kc3JdnWyQBsng==
+      INTEGRA_DATABASE_URL: gAAAAABq-fYZBGee6soQQpgs6cpvAnuda1f7Nchht7GUqdVneFIjbO1p_HDrMhAzeScqvsNAW0QiVTNsNqfGpmmNAVCu7ZMLE2XzTQBeq9lyx96ZG_IYhrqfsJOGbJV6vgTRZ40OcH4fAmrZK2eECCvwfYGK48Y04Q==
+    ports:
+      - "5501:5501"
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             gunicorn -w 2 -b 0.0.0.0:5501 app:app"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

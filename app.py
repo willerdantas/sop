@@ -15,6 +15,7 @@ Execute com:
     flask --app app run --debug
 """
 import calendar
+import os
 from datetime import datetime, date, time as dtime, timedelta
 from functools import wraps
 from zoneinfo import ZoneInfo
@@ -2025,6 +2026,7 @@ def register_routes(app):
             "usuario_perfil": session.get("perfil"),
             "paginas_permitidas": paginas_permitidas,
             "status_label": STATUS_LABEL,
+            "ambiente_homolog": os.environ.get("AMBIENTE", "").strip().lower() == "homolog",
         }
 
 

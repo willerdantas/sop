@@ -11,6 +11,12 @@
 <body>
 {% import "_icons.html" as icons %}
 
+{% if ambiente_homolog %}
+<div style="background:#b45309; color:#fff; text-align:center; font-weight:700; font-size:13px; padding:6px 10px; letter-spacing:0.03em;">
+  AMBIENTE DE HOMOLOGAÇÃO / TREINAMENTO — dados fictícios, não é o sistema real
+</div>
+{% endif %}
+
 <!-- Overlay de carregamento / transicao entre paginas -->
 <div id="loading-overlay">
   <div class="loading-logo-wrap">
