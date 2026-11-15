@@ -118,10 +118,42 @@ function initUserMenu() {
 /* ---------------------------------------------------------
  * UTILITARIOS COMPARTILHADOS
  * --------------------------------------------------------- */
+/**
+ * Escapa um valor para ser inserido em HTML (conteudo ou atributo entre
+ * aspas). TODO dado vindo do servidor/usuario interpolado em innerHTML
+ * deve passar por aqui, senao um nome como <img src=x onerror=...>
+ * executaria codigo no navegador de quem abrir a tela (XSS).
+ */
+function esc(valor) {
+  if (valor === null || valor === undefined) return "";
+  return String(valor)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/`/g, "&#96;");
+}
+
+/** Valor para usar como argumento de funcao em onclick="...": JSON escapado para atributo. */
+function argJs(valor) {
+  return esc(JSON.stringify(valor === undefined ? null : valor));
+}
+
+function tokenCsrf() {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.getAttribute("content") : "";
+}
+
 async function apiFetch(url, options = {}) {
   const resp = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": tokenCsrf(),
+      ...(options.headers || {}),
+    },
   });
   let payload = null;
   try { payload = await resp.json(); } catch (e) { /* resposta sem corpo */ }
@@ -200,7 +232,7 @@ function badgeDiasAlta(dias) {
   else if (dias <= 90) { fundo = "#D64545"; cor = "#fff"; }
   else { fundo = "#000"; cor = "#fff"; }
 
-  return `<span class="badge" style="background:${fundo}; color:${cor};">${dias} dia${dias === 1 ? "" : "s"}</span>`;
+  return `<span class="badge" style="background:${fundo}; color:${cor};">${esc(dias)} dia${dias === 1 ? "" : "s"}</span>`;
 }
 
 const STATUS_BADGE_CLASSE = {
@@ -223,13 +255,13 @@ const STATUS_LABEL_JS = {
 
 function badgeStatus(status) {
   const classe = STATUS_BADGE_CLASSE[status] || "badge-unidade";
-  const label = STATUS_LABEL_JS[status] || status;
+  const label = esc(STATUS_LABEL_JS[status] || status);
   return `<span class="badge ${classe}">${label}</span>`;
 }
 
 function badgeCriticidade(criticidade) {
   const mapa = { alta: "badge-critica", media: "badge-media", baixa: "badge-baixa" };
-  return `<span class="badge ${mapa[criticidade] || "badge-media"}">${criticidade || "-"}</span>`;
+  return `<span class="badge ${mapa[criticidade] || "badge-media"}">${esc(criticidade || "-")}</span>`;
 }
 
 function badgeStatusPendencia(status) {
@@ -239,7 +271,7 @@ function badgeStatusPendencia(status) {
     resolvida: '<span class="badge badge-media">Resolvida (aguardando SOP)</span>',
     confirmada: '<span class="badge badge-ok">Confirmada</span>',
   };
-  return mapa[status] || status;
+  return mapa[status] || esc(status);
 }
 
 /**
@@ -269,7 +301,7 @@ function configurarBuscaProfissional() {
     }
     resultados.innerHTML = encontrados.map((nome) => `
       <div style="padding:6px 0; cursor:pointer; border-bottom:1px solid var(--cor-borda);"
-           onclick="selecionarProfissional(${JSON.stringify(nome)})">${nome}</div>
+           onclick="selecionarProfissional(${argJs(nome)})">${esc(nome)}</div>
     `).join("");
   });
 }

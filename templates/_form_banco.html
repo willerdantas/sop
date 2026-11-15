@@ -17,6 +17,7 @@
 </style>
 
 <form method="POST" action="{{ url_for('configuracao.banco') }}" data-nav-loading style="width:100%;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="config-grupos">
     {% for nome, titulo, dica in [
          ('principal', 'Banco principal (SOP)', 'Banco do próprio sistema de prontuários. Se não existir, é criado com as tabelas.'),

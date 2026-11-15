@@ -39,8 +39,8 @@ async function carregarUnidade() {
     renderizarTabela(confirmados);
     atualizarKpis(confirmados);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
-    tbodyEnviados.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbodyEnviados.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -55,16 +55,16 @@ function renderizarEnviados(lista) {
 
   tbody.innerHTML = lista.map((p) => `
     <tr>
-      <td><strong>${p.numero_prontuario}</strong></td>
-      <td>${p.paciente_nome}</td>
-      <td>${p.unidade_nome || "-"}</td>
+      <td><strong>${esc(p.numero_prontuario)}</strong></td>
+      <td>${esc(p.paciente_nome)}</td>
+      <td>${esc(p.unidade_nome || "-")}</td>
       <td>${p.pendencias_abertas > 0
-          ? `<span class="badge badge-pendencia">${p.pendencias_abertas} aberta(s)</span>`
+          ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
           : `<span class="badge badge-ok">Sem pendência</span>`}</td>
-      <td>${formatarData(p.atualizado_em)}</td>
+      <td>${esc(formatarData(p.atualizado_em))}</td>
       <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
       <td class="acoes-linha">
-        <button class="btn btn-primario btn-sm" onclick="confirmarRecebimentoUnidade(${p.id})">Recebido</button>
+        <button class="btn btn-primario btn-sm" onclick="confirmarRecebimentoUnidade(${esc(p.id)})">Recebido</button>
       </td>
     </tr>
   `).join("");
@@ -96,20 +96,20 @@ function renderizarTabela(lista) {
 
   tbody.innerHTML = lista.map((p) => `
     <tr>
-      <td><strong>${p.numero_prontuario}</strong></td>
-      <td>${p.paciente_nome}</td>
-      <td>${p.unidade_nome || "-"}</td>
+      <td><strong>${esc(p.numero_prontuario)}</strong></td>
+      <td>${esc(p.paciente_nome)}</td>
+      <td>${esc(p.unidade_nome || "-")}</td>
       <td>${p.prioridade === "urgente" ? '<span class="badge badge-pendencia">Urgente</span>' : "Normal"}</td>
-      <td>${p.localizacao_fisica || "-"}</td>
+      <td>${esc(p.localizacao_fisica || "-")}</td>
       <td>${p.pendencias_abertas > 0
-          ? `<span class="badge badge-pendencia">${p.pendencias_abertas} aberta(s)</span>`
+          ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
           : `<span class="badge badge-ok">Sem pendência</span>`}</td>
-      <td>${formatarData(p.atualizado_em)}</td>
+      <td>${esc(formatarData(p.atualizado_em))}</td>
       <td>${formatarTimerHorasUteis(p.horas_uteis_na_unidade)}</td>
       <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
       <td class="acoes-linha">
-        <button class="btn btn-outline btn-sm" onclick="location.href='/analise_unidade/${p.id}'">Analisar</button>
-        <button class="btn btn-primario btn-sm" onclick="enviarParaSOP(${p.id})">Enviar p/ SOP</button>
+        <button class="btn btn-outline btn-sm" onclick="location.href='/analise_unidade/${esc(p.id)}'">Analisar</button>
+        <button class="btn btn-primario btn-sm" onclick="enviarParaSOP(${esc(p.id)})">Enviar p/ SOP</button>
       </td>
     </tr>
   `).join("");
@@ -144,24 +144,24 @@ async function carregarPendenciasUnidade() {
 
     tbody.innerHTML = pendentes.map((p) => `
       <tr>
-        <td><strong>${p.numero_prontuario}</strong></td>
-        <td>${p.paciente_nome}</td>
-        <td>${p.tipo_descricao || "-"}</td>
-        <td>${p.profissional || "-"}</td>
-        <td>${formatarDataSimples(p.data_ocorrencia)}</td>
+        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td>${esc(p.tipo_descricao || "-")}</td>
+        <td>${esc(p.profissional || "-")}</td>
+        <td>${esc(formatarDataSimples(p.data_ocorrencia))}</td>
         <td>${badgeCriticidade(p.criticidade)}</td>
-        <td style="max-width:260px;">${p.descricao}</td>
+        <td style="max-width:260px;">${esc(p.descricao)}</td>
         <td>${badgeStatusPendencia(p.status)}</td>
         <td>${formatarTimerHorasUteis(p.horas_uteis_desde_abertura)}</td>
         <td class="acoes-linha">
           ${p.status === "resolvida"
             ? `<span class="texto-suave">Aguardando confirmação do SOP</span>`
-            : `<button class="btn btn-primario btn-sm" onclick="resolverPendenciaUnidade(${p.id})">Resolver</button>`}
+            : `<button class="btn btn-primario btn-sm" onclick="resolverPendenciaUnidade(${esc(p.id)})">Resolver</button>`}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

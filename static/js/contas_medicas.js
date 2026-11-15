@@ -53,21 +53,21 @@ async function carregarAguardando() {
 
     tbody.innerHTML = aguardando.map((p) => `
       <tr>
-        <td><strong>${p.numero_prontuario}</strong></td>
-        <td>${p.paciente_nome}</td>
-        <td>${p.unidade_nome || "-"}</td>
+        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td>${esc(p.unidade_nome || "-")}</td>
         <td>${p.pendencias_abertas > 0
-            ? `<span class="badge badge-pendencia">${p.pendencias_abertas} aberta(s)</span>`
+            ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
-        <td>${formatarData(p.atualizado_em)}</td>
+        <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td class="acoes-linha">
-          <button class="btn btn-primario btn-sm" onclick="confirmarRecebimento(${p.id})">Confirmar Entrega</button>
+          <button class="btn btn-primario btn-sm" onclick="confirmarRecebimento(${esc(p.id)})">Confirmar Entrega</button>
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -96,22 +96,22 @@ async function carregarContas() {
 
     tbody.innerHTML = confirmados.map((p) => `
       <tr>
-        <td><strong>${p.numero_prontuario}</strong></td>
-        <td>${p.paciente_nome}</td>
-        <td>${p.unidade_nome || "-"}</td>
+        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td>${esc(p.unidade_nome || "-")}</td>
         <td>${p.pendencias_abertas > 0
-            ? `<span class="badge badge-pendencia">${p.pendencias_abertas} aberta(s)</span>`
+            ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
-        <td>${formatarData(p.recebido_contas_medicas_em)}</td>
-        <td>${p.recebido_contas_medicas_usuario_nome || "-"}</td>
+        <td>${esc(formatarData(p.recebido_contas_medicas_em))}</td>
+        <td>${esc(p.recebido_contas_medicas_usuario_nome || "-")}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick="analisarEMigrarFaturamento(${p.id})">Analisar</button>
+          <button class="btn btn-outline btn-sm" onclick="analisarEMigrarFaturamento(${esc(p.id)})">Analisar</button>
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -139,24 +139,24 @@ async function carregarFaturamento() {
 
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${p.numero_prontuario}</strong></td>
-        <td>${p.paciente_nome}</td>
-        <td>${p.unidade_nome || "-"}</td>
-        <td>${formatarData(p.atualizado_em)}</td>
-        <td>${p.faturamento_usuario_nome || "-"}</td>
+        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${esc(formatarData(p.atualizado_em))}</td>
+        <td>${esc(p.faturamento_usuario_nome || "-")}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td class="acoes-linha">
           ${USUARIO_PERFIL === "auditor_c_med" ? "-" : `
-          <button class="btn btn-outline btn-sm" onclick="location.href='/analise_c_medicas/${p.id}'">Analisar</button>
-          <button class="btn btn-verde-agua btn-sm" onclick="devolverParaSOP(${p.id})">Devolver p/ SOP</button>
-          <button class="btn btn-primario btn-sm" onclick="enviarParaAuditoria(${p.id})">Enviar para Auditoria</button>
-          <button class="btn btn-secundario btn-sm" onclick="prontuarioFaturado(${p.id})">Prontuário Faturado</button>
+          <button class="btn btn-outline btn-sm" onclick="location.href='/analise_c_medicas/${esc(p.id)}'">Analisar</button>
+          <button class="btn btn-verde-agua btn-sm" onclick="devolverParaSOP(${esc(p.id)})">Devolver p/ SOP</button>
+          <button class="btn btn-primario btn-sm" onclick="enviarParaAuditoria(${esc(p.id)})">Enviar para Auditoria</button>
+          <button class="btn btn-secundario btn-sm" onclick="prontuarioFaturado(${esc(p.id)})">Prontuário Faturado</button>
           `}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -184,15 +184,15 @@ async function carregarFaturados() {
 
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${p.numero_prontuario}</strong></td>
-        <td>${p.paciente_nome}</td>
-        <td>${p.unidade_nome || "-"}</td>
-        <td>${formatarData(p.atualizado_em)}</td>
-        <td>${p.finalizado_usuario_nome || "-"}</td>
+        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${esc(formatarData(p.atualizado_em))}</td>
+        <td>${esc(p.finalizado_usuario_nome || "-")}</td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -234,23 +234,23 @@ async function carregarAuditoria() {
 
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${p.numero_prontuario}</strong></td>
-        <td>${p.paciente_nome}</td>
-        <td>${p.unidade_nome || "-"}</td>
-        <td>${formatarData(p.atualizado_em)}</td>
-        <td>${p.auditoria_analisado_em ? formatarData(p.auditoria_analisado_em) : "-"}</td>
-        <td>${p.auditoria_analisado_usuario_nome || "-"}</td>
+        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${esc(formatarData(p.atualizado_em))}</td>
+        <td>${esc(p.auditoria_analisado_em ? formatarData(p.auditoria_analisado_em) : "-")}</td>
+        <td>${esc(p.auditoria_analisado_usuario_nome || "-")}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td class="acoes-linha">
           ${USUARIO_PERFIL === "faturista" ? "-" : `
-          <button class="btn btn-outline btn-sm" onclick="analisarAuditoria(${p.id})">Analisar</button>
-          <button class="btn btn-primario btn-sm" onclick="enviarParaFaturamento(${p.id})">Enviar para Faturamento</button>
+          <button class="btn btn-outline btn-sm" onclick="analisarAuditoria(${esc(p.id)})">Analisar</button>
+          <button class="btn btn-primario btn-sm" onclick="enviarParaFaturamento(${esc(p.id)})">Enviar para Faturamento</button>
           `}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

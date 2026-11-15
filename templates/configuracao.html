@@ -55,6 +55,7 @@
         Ela será pedida sempre que for preciso reconfigurar o banco.
       </div>
       <form method="POST" action="{{ url_for('configuracao.criar_senha') }}" data-nav-loading style="width:100%;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="campo">
           <label for="senha">Nova senha</label>
           <input type="password" id="senha" name="senha" required autofocus
@@ -74,6 +75,7 @@
         O banco de dados não está acessível. O sistema está em modo de configuração.
       </div>
       <form method="POST" action="{{ url_for('configuracao.entrar') }}" data-nav-loading style="width:100%;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="campo">
           <label for="login">Usuário</label>
           <input type="text" id="login" value="admin" disabled>

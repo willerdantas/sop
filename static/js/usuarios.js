@@ -53,23 +53,23 @@ async function carregar() {
     }
     tbody.innerHTML = lista.map((u) => `
       <tr>
-        <td><strong>${u.nome}</strong></td>
-        <td>${u.login}</td>
-        <td>${u.email || "-"}</td>
-        <td>${rotuloPerfil(u.perfil)}</td>
-        <td>${u.unidade_nome || "-"}</td>
+        <td><strong>${esc(u.nome)}</strong></td>
+        <td>${esc(u.login)}</td>
+        <td>${esc(u.email || "-")}</td>
+        <td>${esc(rotuloPerfil(u.perfil))}</td>
+        <td>${esc(u.unidade_nome || "-")}</td>
         <td>${u.ativo ? '<span class="badge badge-ok">Ativo</span>' : '<span class="badge badge-pendencia">Inativo</span>'}</td>
-        <td>${u.ultimo_login ? formatarData(u.ultimo_login) : "Nunca acessou"}</td>
+        <td>${esc(u.ultimo_login ? formatarData(u.ultimo_login) : "Nunca acessou")}</td>
         <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick='editarUsuario(${JSON.stringify(u)})'>Editar</button>
+          <button class="btn btn-outline btn-sm" onclick='editarUsuario(${argJs(u)})'>Editar</button>
           ${u.ativo
-            ? `<button class="btn btn-perigo btn-sm" onclick="excluirUsuario(${u.id})">Desativar</button>`
-            : `<button class="btn btn-primario btn-sm" onclick="ativarUsuario(${u.id})">Ativar</button>`}
+            ? `<button class="btn btn-perigo btn-sm" onclick="excluirUsuario(${esc(u.id)})">Desativar</button>`
+            : `<button class="btn btn-primario btn-sm" onclick="ativarUsuario(${esc(u.id)})">Ativar</button>`}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

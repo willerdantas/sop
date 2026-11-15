@@ -45,19 +45,19 @@ async function carregar() {
     }
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${p.nome}</strong></td>
-        <td>${p.categoria}</td>
-        <td>${p.conselho ? `${p.conselho} ${p.numero_conselho || ""}${p.uf_conselho ? "/" + p.uf_conselho : ""}` : "-"}</td>
-        <td>${[p.telefone, p.email].filter(Boolean).join(" · ") || "-"}</td>
+        <td><strong>${esc(p.nome)}</strong></td>
+        <td>${esc(p.categoria)}</td>
+        <td>${p.conselho ? esc(`${p.conselho} ${p.numero_conselho || ""}${p.uf_conselho ? "/" + p.uf_conselho : ""}`) : "-"}</td>
+        <td>${esc([p.telefone, p.email].filter(Boolean).join(" · ")) || "-"}</td>
         <td>${p.ativo ? '<span class="badge badge-ok">Ativo</span>' : '<span class="badge badge-pendencia">Inativo</span>'}</td>
         <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick='editarProfissional(${JSON.stringify(p)})'>Editar</button>
-          <button class="btn btn-perigo btn-sm" onclick="excluirProfissional(${p.id})">Desativar</button>
+          <button class="btn btn-outline btn-sm" onclick='editarProfissional(${argJs(p)})'>Editar</button>
+          <button class="btn btn-perigo btn-sm" onclick="excluirProfissional(${esc(p.id)})">Desativar</button>
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

@@ -16,6 +16,7 @@ Execute com:
 """
 import calendar
 import os
+import re
 from datetime import datetime, date, time as dtime, timedelta
 from functools import wraps
 from zoneinfo import ZoneInfo
@@ -38,7 +39,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 import configuracao_inicial
 import db
+import seguranca
+import validacao as v
 from config import Config
+from crypto_utils import cifrar_campo, decifrar_campos
 
 FLUXO_ORDEM = [
     "unidade",
@@ -62,6 +66,15 @@ STATUS_LABEL = {
 # 1 = Residencia, 3 = Outro hospital, 4 = Obito.
 ALTAS_DESTINOS_VALIDOS = (1, 3, 4)
 ALTAS_DATA_INICIO = "2026-11-01"
+
+# Valores aceitos nos campos de escolha (validados em toda gravacao).
+PRIORIDADES = ("normal", "urgente")
+CRITICIDADES = ("baixa", "media", "alta")
+STATUS_PENDENCIA = ("aberta", "em_analise", "resolvida", "confirmada")
+UFS = (
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA",
+    "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+)
 
 
 FUSO_HORARIO_HOSPITAL = ZoneInfo("America/Fortaleza")
@@ -103,6 +116,9 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # Primeiro: HTTPS, CSRF, cabecalhos e tratamento de erros valem para
+    # todas as rotas, inclusive as do modo de configuracao.
+    seguranca.init_app(app)
     db.register_teardown(app)
 
     # Conecta aos bancos. Se nao conseguir, a app sobe em "modo de
@@ -114,12 +130,30 @@ def create_app():
     return app
 
 
+def _senha_hash_admin_inicial():
+    """Hash da senha do primeiro admin, sem nunca usar uma senha fixa:
+    1. ADMIN_DEFAULT_SENHA do .env, se definida;
+    2. senha criada na configuracao inicial (SETUP_ADMIN_SENHA_HASH);
+    3. senha aleatoria, exibida uma unica vez no log do servidor."""
+    if Config.ADMIN_DEFAULT_SENHA:
+        return generate_password_hash(Config.ADMIN_DEFAULT_SENHA)
+    hash_setup = os.environ.get(configuracao_inicial.CHAVE_HASH_SENHA)
+    if hash_setup:
+        print("[info] admin inicial criado com a senha definida na configuracao inicial.")
+        return hash_setup
+    import secrets
+    senha = secrets.token_urlsafe(12)
+    print(f"[IMPORTANTE] admin inicial '{Config.ADMIN_DEFAULT_LOGIN}' criado com a senha "
+          f"provisoria: {senha}  (troque-a na tela Usuarios)")
+    return generate_password_hash(senha)
+
+
 def _seed_admin():
     """Cria um usuario admin padrao se a tabela usuarios estiver vazia."""
     try:
         existentes = db.query("SELECT COUNT(*) AS total FROM usuarios", fetchone=True)
         if existentes and existentes["total"] == 0:
-            senha_hash = generate_password_hash(Config.ADMIN_DEFAULT_SENHA)
+            senha_hash = _senha_hash_admin_inicial()
             db.execute(
                 """INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo)
                    VALUES (%s, %s, %s, 'admin', TRUE)""",
@@ -671,7 +705,84 @@ def prontuario_da_unidade_do_usuario(prontuario_row):
     return bool(prontuario_row) and prontuario_row.get("unidade_id") in unidade_ids
 
 
+def destino_interno(url):
+    """Aceita apenas caminhos internos ("/sop"), nunca outro site
+    ("//evil.com", "https://evil.com", "/\\evil.com") - evita open redirect."""
+    if not url or not url.startswith("/") or url.startswith("//") or "\\" in url:
+        return None
+    if any(ord(c) < 32 for c in url):
+        return None
+    return url
+
+
+# Destinos que cada pagina pode dar a um prontuario (os mesmos usados pelos
+# botoes de cada tela). Bloqueia, por exemplo, um usuario so da "Unidade"
+# de mandar um prontuario direto para "finalizado" chamando a API.
+DESTINOS_POR_PAGINA = {
+    "unidade": {"sop"},
+    "sop": {"sop", "unidade", "contas_medicas"},
+    "contas_medicas": {"sop", "pronto_faturamento", "auditoria", "finalizado"},
+}
+
+
+def destinos_permitidos_usuario():
+    if session.get("perfil") == "admin":
+        return set(FLUXO_ORDEM)
+    permitidos = set()
+    for pagina in session.get("paginas_permitidas") or []:
+        permitidos |= DESTINOS_POR_PAGINA.get(pagina, set())
+    return permitidos
+
+
+def obter_prontuario_autorizado(prontuario_id):
+    """(prontuario, None) se existir e for de uma unidade do usuario; senao
+    (None, resposta de erro 404/403) - impede acessar registros de outras
+    unidades trocando o id na URL."""
+    row = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
+    if not row:
+        return None, (jsonify({"erro": "prontuario nao encontrado"}), 404)
+    if not prontuario_da_unidade_do_usuario(row):
+        return None, (jsonify({"erro": "sem permissao para acessar este prontuario"}), 403)
+    return row, None
+
+
 def register_routes(app):
+
+    @app.before_request
+    def revalidar_sessao():
+        """A cada requisicao, confere NO BANCO se o usuario da sessao ainda
+        existe e esta ativo, e recarrega perfil, paginas e unidades. Assim
+        inativar um usuario, trocar a senha ou mudar o perfil vale na hora,
+        e nada do que o navegador guarda e usado para autorizar."""
+        if not session.get("usuario_id") or request.endpoint == "static" or not db.pools_ativos():
+            return None
+        usuario = db.query(
+            """SELECT u.nome, u.perfil, u.ativo, u.sessao_versao,
+                      ARRAY(SELECT uu.unidade_id FROM usuario_unidades uu
+                            WHERE uu.usuario_id = u.id ORDER BY 1) AS unidade_ids,
+                      ARRAY(SELECT pp.pagina FROM perfis pf
+                            JOIN perfil_paginas pp ON pp.perfil_id = pf.id
+                            WHERE pf.nome = u.perfil AND pf.ativo ORDER BY 1) AS paginas
+               FROM usuarios u WHERE u.id = %s""",
+            (session["usuario_id"],), fetchone=True
+        )
+        if not usuario or not usuario["ativo"] or usuario["sessao_versao"] != session.get("sessao_versao"):
+            session.clear()
+            if request.path.startswith("/api/"):
+                return jsonify({"erro": "sessao encerrada - entre novamente"}), 401
+            flash("Sua sessão foi encerrada. Entre novamente.", "erro")
+            return redirect(url_for("login"))
+        atual = {
+            "nome": usuario["nome"],
+            "perfil": usuario["perfil"],
+            "unidade_ids": list(usuario["unidade_ids"]),
+            "paginas_permitidas": [] if usuario["perfil"] == "admin" else list(usuario["paginas"]),
+        }
+        for chave, valor in atual.items():
+            if session.get(chave) != valor:
+                session[chave] = valor
+        db.aplicar_contexto_rls()
+        return None
 
     @app.before_request
     def restringir_acesso_por_perfil():
@@ -707,20 +818,41 @@ def register_routes(app):
             return redirect(url_for("dashboard"))
         return redirect(url_for("login"))
 
+    # Hash usado quando o login nao existe: a verificacao leva o mesmo tempo
+    # e a resposta nao revela quais logins sao validos.
+    hash_falso = generate_password_hash(os.urandom(16).hex())
+
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if request.method == "POST":
-            login_usuario = request.form.get("login", "").strip()
-            senha = request.form.get("senha", "")
+            login_usuario = request.form.get("login", "").strip()[:60]
+            senha = request.form.get("senha", "")[:128]
 
-            usuario = db.query(
-                "SELECT * FROM usuarios WHERE login = %s AND ativo = TRUE",
-                (login_usuario,), fetchone=True
-            )
+            espera = seguranca.segundos_bloqueio_login(login_usuario)
+            if espera:
+                flash(f"Muitas tentativas de login. Aguarde {(espera + 59) // 60} minuto(s) "
+                      "e tente novamente.", "erro")
+                return render_template("login.html"), 429
 
-            if usuario and check_password_hash(usuario["senha_hash"], senha):
-                session.clear()
+            usuario = None
+            # Campo isca preenchido = robo: trata como falha, sem avisar.
+            if not request.form.get(seguranca.CAMPO_ISCA):
+                usuario = db.query(
+                    "SELECT * FROM usuarios WHERE login = %s AND ativo = TRUE",
+                    (login_usuario,), fetchone=True
+                )
+            senha_ok = check_password_hash(usuario["senha_hash"] if usuario else hash_falso, senha)
+
+            if usuario and senha_ok:
+                seguranca.limpar_falhas_login(login_usuario)
+                if not usuario["senha_hash"].startswith("scrypt:"):
+                    # Hash antigo/mais fraco: regrava com o algoritmo atual.
+                    db.execute("UPDATE usuarios SET senha_hash = %s WHERE id = %s",
+                               (generate_password_hash(senha), usuario["id"]))
+                session.clear()  # nova sessao: evita fixacao de sessao
+                session.permanent = True
                 session["usuario_id"] = usuario["id"]
+                session["sessao_versao"] = usuario.get("sessao_versao", 0)
                 session["nome"] = usuario["nome"]
                 session["perfil"] = usuario["perfil"]
                 session["unidade_ids"] = unidades_do_usuario(usuario["id"])
@@ -739,9 +871,10 @@ def register_routes(app):
                 if tela_inicial not in paginas_do_usuario:
                     tela_inicial = primeira_pagina_permitida(paginas_do_usuario)
                 destino_padrao = url_for(tela_inicial or "dashboard")
-                destino = request.args.get("next") or destino_padrao
+                destino = destino_interno(request.args.get("next")) or destino_padrao
                 return redirect(destino)
 
+            seguranca.registrar_falha_login(login_usuario)
             flash("Login ou senha invalidos.", "erro")
 
         return render_template("login.html")
@@ -942,12 +1075,13 @@ def register_routes(app):
     @app.route("/api/prontuarios", methods=["GET"])
     @login_required
     def api_listar_prontuarios():
-        status = request.args.get("status")
-        busca = request.args.get("q")
-        numero = request.args.get("numero")
-        nome = request.args.get("nome")
-        data_inicio = request.args.get("data_inicio")
-        data_fim = request.args.get("data_fim")
+        args = request.args
+        status = v.escolha(args.get("status"), "status", FLUXO_ORDEM)
+        busca = v.termo_busca(args.get("q"))
+        numero = v.termo_busca(args.get("numero"))
+        nome = v.termo_busca(args.get("nome"))
+        data_inicio = v.data_iso(args.get("data_inicio"), "data inicial")
+        data_fim = v.data_iso(args.get("data_fim"), "data final")
 
         sql = """
             SELECT p.*,
@@ -1032,20 +1166,20 @@ def register_routes(app):
     @app.route("/api/prontuarios/<int:prontuario_id>/mover", methods=["POST"])
     @login_required
     def api_mover_prontuario(prontuario_id):
-        data = request.get_json(force=True)
+        data = v.corpo_json()
         destino = data.get("destino")
-        observacao = data.get("observacao", "")
+        observacao = v.texto(data.get("observacao"), "observacao", 2000, padrao="", multilinha=True)
 
         if destino not in FLUXO_ORDEM:
             return jsonify({"erro": "status de destino invalido"}), 400
 
-        atual = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
-        if not atual:
-            return jsonify({"erro": "prontuario nao encontrado"}), 404
-        if not prontuario_da_unidade_do_usuario(atual):
-            return jsonify({"erro": "sem permissao para mover este prontuario"}), 403
+        atual, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
         if session.get("perfil") == "operador" and destino != "sop":
             return jsonify({"erro": "perfil operador so pode enviar o prontuario para o SOP"}), 403
+        if destino not in destinos_permitidos_usuario():
+            return jsonify({"erro": "seu perfil nao pode enviar o prontuario para este destino"}), 403
 
         # Regra de negocio: so pode ir para "contas_medicas" ou alem quando nao
         # houver pendencia cadastrada, ou todas estiverem confirmadas pelo SOP
@@ -1090,9 +1224,9 @@ def register_routes(app):
     @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento", methods=["POST"])
     @login_required
     def api_confirmar_recebimento_prontuario(prontuario_id):
-        atual = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
-        if not atual:
-            return jsonify({"erro": "prontuario nao encontrado"}), 404
+        atual, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
         if atual["status_atual"] != "contas_medicas":
             return jsonify({"erro": "prontuario nao esta aguardando recebimento em contas medicas"}), 400
         if atual["recebido_contas_medicas_em"]:
@@ -1108,29 +1242,28 @@ def register_routes(app):
     @app.route("/api/prontuarios/<int:prontuario_id>/valores-faturamento", methods=["PUT"])
     @login_required
     def api_editar_valores_faturamento(prontuario_id):
-        data = request.get_json(force=True)
-
-        def inteiro_ou_none(valor):
-            if valor is None or valor == "":
-                return None
-            return int(valor)
+        data = v.corpo_json()
+        _, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
 
         atualizado = db.execute(
             """UPDATE prontuarios
                SET dias_enfermaria=%s, dias_uti=%s, diaria_acompanhante=%s
                WHERE id=%s RETURNING *""",
-            (inteiro_ou_none(data.get("dias_enfermaria")),
-             inteiro_ou_none(data.get("dias_uti")),
-             inteiro_ou_none(data.get("diaria_acompanhante")),
+            (v.inteiro(data.get("dias_enfermaria"), "dias de enfermaria", minimo=0, maximo=3650),
+             v.inteiro(data.get("dias_uti"), "dias de UTI", minimo=0, maximo=3650),
+             v.inteiro(data.get("diaria_acompanhante"), "diarias de acompanhante", minimo=0, maximo=3650),
              prontuario_id)
         )
-        if not atualizado:
-            return jsonify({"erro": "prontuario nao encontrado"}), 404
         return jsonify(atualizado)
 
     @app.route("/api/prontuarios/<int:prontuario_id>/registrar-analise-auditoria", methods=["POST"])
     @login_required
     def api_registrar_analise_auditoria(prontuario_id):
+        _, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
         db.execute(
             "UPDATE prontuarios SET auditoria_analisado_em = NOW(), auditoria_analisado_usuario_id = %s WHERE id = %s",
             (session["usuario_id"], prontuario_id)
@@ -1140,11 +1273,9 @@ def register_routes(app):
     @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento-unidade", methods=["POST"])
     @login_required
     def api_confirmar_recebimento_unidade(prontuario_id):
-        atual = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
-        if not atual:
-            return jsonify({"erro": "prontuario nao encontrado"}), 404
-        if not prontuario_da_unidade_do_usuario(atual):
-            return jsonify({"erro": "sem permissao para confirmar este prontuario"}), 403
+        atual, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
         if atual["status_atual"] != "unidade":
             return jsonify({"erro": "prontuario nao esta aguardando recebimento na unidade"}), 400
         if atual["recebido_unidade_em"]:
@@ -1160,9 +1291,9 @@ def register_routes(app):
     @app.route("/api/prontuarios/<int:prontuario_id>/historico", methods=["GET"])
     @login_required
     def api_historico_prontuario(prontuario_id):
-        prontuario_row = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
-        if not prontuario_da_unidade_do_usuario(prontuario_row):
-            return jsonify({"erro": "sem permissao para ver este prontuario"}), 403
+        _, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
 
         rows = db.query(
             """SELECT m.*, u.nome AS usuario_nome
@@ -1185,7 +1316,7 @@ def register_routes(app):
             pagina = max(1, int(request.args.get("pagina", 1)))
         except ValueError:
             pagina = 1
-        prazo = request.args.get("prazo")
+        prazo = v.escolha(request.args.get("prazo"), "prazo", ("30", "60", "80", "90", "90+"))
 
         pendentes = listar_altas_pendentes()
         if prazo:
@@ -1246,8 +1377,12 @@ def register_routes(app):
         numero_prontuario = (alta["num_prontuario"] or "").strip()
         if not numero_prontuario:
             return jsonify({"erro": "esta alta nao possui numero de prontuario no sistema hospitalar"}), 400
+        if not prontuario_da_unidade_do_usuario({"unidade_id": int(alta["isn_clinica"])}):
+            return jsonify({"erro": "sem permissao para registrar altas desta unidade"}), 403
 
-        data = request.get_json(force=True)
+        data = v.corpo_json()
+        prioridade = v.escolha(data.get("prioridade"), "prioridade", PRIORIDADES, padrao="normal")
+        localizacao = v.texto(data.get("localizacao_fisica"), "localizacao fisica", 120)
 
         try:
             novo = db.execute(
@@ -1261,7 +1396,7 @@ def register_routes(app):
                     numero_prontuario, alta["paciente_nome"],
                     int(alta["isn_clinica"]) if alta["isn_clinica"] is not None else None,
                     alta["dat_internacao"], alta["dat_alta"],
-                    data.get("prioridade", "normal"), data.get("localizacao_fisica"),
+                    prioridade, localizacao,
                     isn_internacao_leito,
                 )
             )
@@ -1279,7 +1414,7 @@ def register_routes(app):
     @app.route("/api/internacoes/buscar", methods=["GET"])
     @login_required
     def api_buscar_internacoes_prontuario():
-        numero = (request.args.get("numero") or "").strip()
+        numero = v.texto(request.args.get("numero"), "numero do prontuario", 30)
         if not numero:
             return jsonify({"erro": "informe o numero do prontuario"}), 400
 
@@ -1347,8 +1482,13 @@ def register_routes(app):
         numero_prontuario = (internacao["num_prontuario"] or "").strip()
         if not numero_prontuario:
             return jsonify({"erro": "esta internacao nao possui numero de prontuario no sistema hospitalar"}), 400
+        unidade_internacao = int(internacao["isn_clinica"]) if internacao["isn_clinica"] is not None else None
+        if not prontuario_da_unidade_do_usuario({"unidade_id": unidade_internacao}):
+            return jsonify({"erro": "sem permissao para registrar internacoes desta unidade"}), 403
 
-        data = request.get_json(force=True)
+        data = v.corpo_json()
+        prioridade = v.escolha(data.get("prioridade"), "prioridade", PRIORIDADES, padrao="normal")
+        localizacao = v.texto(data.get("localizacao_fisica"), "localizacao fisica", 120)
 
         try:
             novo = db.execute(
@@ -1360,9 +1500,9 @@ def register_routes(app):
                    RETURNING *""",
                 (
                     numero_prontuario, internacao["paciente_nome"],
-                    int(internacao["isn_clinica"]) if internacao["isn_clinica"] is not None else None,
+                    unidade_internacao,
                     internacao["dat_internacao"], internacao["dat_alta"],
-                    data.get("prioridade", "normal"), data.get("localizacao_fisica"),
+                    prioridade, localizacao,
                     isn_internacao_leito,
                 )
             )
@@ -1382,8 +1522,8 @@ def register_routes(app):
     @app.route("/api/pendencias", methods=["GET"])
     @login_required
     def api_listar_pendencias():
-        status = request.args.get("status")
-        prontuario_id = request.args.get("prontuario_id")
+        status = v.escolha(request.args.get("status"), "status", STATUS_PENDENCIA)
+        prontuario_id = v.inteiro(request.args.get("prontuario_id"), "prontuario_id", minimo=1)
         minha_unidade = request.args.get("minha_unidade")
         sql = """
             SELECT pe.*, p.numero_prontuario, p.paciente_nome,
@@ -1426,26 +1566,31 @@ def register_routes(app):
     @app.route("/api/pendencias", methods=["POST"])
     @login_required
     def api_criar_pendencia():
-        data = request.get_json(force=True)
-        prontuario_id = data.get("prontuario_id")
-        descricao = data.get("descricao", "").strip()
-        tipo_pendencia_id = data.get("tipo_pendencia_id")
-        profissional = (data.get("profissional") or "").strip() or None
-        data_ocorrencia = data.get("data_ocorrencia") or None
-        unidade_id = data.get("unidade_id") or None
+        data = v.corpo_json()
+        prontuario_id = v.inteiro(data.get("prontuario_id"), "prontuario_id", minimo=1)
+        descricao = v.texto(data.get("descricao"), "descricao", 2000, multilinha=True)
+        tipo_pendencia_id = v.inteiro(data.get("tipo_pendencia_id"), "tipo de pendencia", minimo=1)
+        profissional = v.texto(data.get("profissional"), "profissional", 150)
+        data_ocorrencia = v.data_iso(data.get("data_ocorrencia"), "data da ocorrencia")
+        unidade_id = v.inteiro(data.get("unidade_id"), "unidade") or None
 
         if not prontuario_id or not descricao:
             return jsonify({"erro": "prontuario_id e descricao sao obrigatorios"}), 400
         if not profissional or not unidade_id or not data_ocorrencia:
             return jsonify({"erro": "profissional, unidade_id e data_ocorrencia sao obrigatorios"}), 400
+        if tipo_pendencia_id and not db.query(
+            "SELECT 1 FROM tipos_pendencia WHERE id = %s AND ativo = TRUE", (tipo_pendencia_id,), fetchone=True
+        ):
+            return jsonify({"erro": "tipo de pendencia invalido"}), 400
+        if not db.query("SELECT 1 FROM profissionais WHERE nome = %s AND ativo = TRUE", (profissional,), fetchone=True):
+            return jsonify({"erro": "profissional nao cadastrado"}), 400
 
-        prontuario_row = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
-        if not prontuario_row:
-            return jsonify({"erro": "prontuario nao encontrado"}), 404
-        if not prontuario_da_unidade_do_usuario(prontuario_row):
-            return jsonify({"erro": "sem permissao para registrar pendencia neste prontuario"}), 403
+        prontuario_row, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
 
-        erro_historico = validar_pendencia_contra_historico(prontuario_row, unidade_id, data_ocorrencia)
+        erro_historico = validar_pendencia_contra_historico(
+            prontuario_row, unidade_id, data_ocorrencia.isoformat())
         if erro_historico:
             return jsonify({"erro": erro_historico}), 400
 
@@ -1484,6 +1629,9 @@ def register_routes(app):
         pendencia = db.query("SELECT * FROM pendencias WHERE id = %s", (pendencia_id,), fetchone=True)
         if not pendencia:
             return jsonify({"erro": "pendencia nao encontrada"}), 404
+        _, erro = obter_prontuario_autorizado(pendencia["prontuario_id"])
+        if erro:
+            return erro
         if pendencia["status"] != "resolvida":
             return jsonify({"erro": "pendencia precisa estar resolvida pela unidade antes de ser confirmada"}), 400
 
@@ -1499,6 +1647,9 @@ def register_routes(app):
         pendencia = db.query("SELECT * FROM pendencias WHERE id = %s", (pendencia_id,), fetchone=True)
         if not pendencia:
             return jsonify({"erro": "pendencia nao encontrada"}), 404
+        _, erro = obter_prontuario_autorizado(pendencia["prontuario_id"])
+        if erro:
+            return erro
         if pendencia["status"] != "resolvida":
             return jsonify({"erro": "pendencia precisa estar resolvida pela unidade para ser devolvida"}), 400
 
@@ -1519,15 +1670,14 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def api_criar_tipo_pendencia():
-        data = request.get_json(force=True)
-        descricao = (data.get("descricao") or "").strip()
-        if not descricao:
-            return jsonify({"erro": "descricao e obrigatoria"}), 400
+        data = v.corpo_json()
+        descricao = v.texto(data.get("descricao"), "descricao", 150, obrigatorio=True)
 
         novo = db.execute(
             """INSERT INTO tipos_pendencia (descricao, setor_responsavel, criticidade)
                VALUES (%s,%s,%s) RETURNING *""",
-            (descricao, data.get("setor_responsavel"), data.get("criticidade", "media"))
+            (descricao, v.texto(data.get("setor_responsavel"), "setor responsavel", 60),
+             v.escolha(data.get("criticidade"), "criticidade", CRITICIDADES, padrao="media"))
         )
         return jsonify(novo), 201
 
@@ -1535,14 +1685,18 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def api_editar_tipo_pendencia(tipo_id):
-        data = request.get_json(force=True)
+        data = v.corpo_json()
         atualizado = db.execute(
             """UPDATE tipos_pendencia
                SET descricao=%s, setor_responsavel=%s, criticidade=%s, ativo=%s
                WHERE id=%s RETURNING *""",
-            (data.get("descricao"), data.get("setor_responsavel"),
-             data.get("criticidade", "media"), data.get("ativo", True), tipo_id)
+            (v.texto(data.get("descricao"), "descricao", 150, obrigatorio=True),
+             v.texto(data.get("setor_responsavel"), "setor responsavel", 60),
+             v.escolha(data.get("criticidade"), "criticidade", CRITICIDADES, padrao="media"),
+             v.booleano(data.get("ativo"), "ativo", True), tipo_id)
         )
+        if not atualizado:
+            return jsonify({"erro": "tipo de pendencia nao encontrado"}), 404
         return jsonify(atualizado)
 
     @app.route("/api/tipos-pendencia/<int:tipo_id>", methods=["DELETE"])
@@ -1580,10 +1734,9 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def api_criar_unidade_local():
-        data = request.get_json(force=True)
-        nome = (data.get("nome") or "").strip()
-        if not nome:
-            return jsonify({"erro": "nome e obrigatorio"}), 400
+        data = v.corpo_json()
+        nome = v.texto(data.get("nome"), "nome", 120, obrigatorio=True)
+        tipo = v.texto(data.get("tipo"), "tipo", 60)
 
         ultimo = db.query(
             "SELECT MAX(codigo::integer) AS maximo FROM unidades WHERE codigo ~ '^[0-9]+$'",
@@ -1593,7 +1746,7 @@ def register_routes(app):
 
         nova = db.execute(
             "INSERT INTO unidades (nome, codigo, tipo) VALUES (%s,%s,%s) RETURNING *",
-            (nome, proximo_codigo, data.get("tipo"))
+            (nome, proximo_codigo, tipo)
         )
         return jsonify(nova), 201
 
@@ -1601,15 +1754,15 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def api_editar_unidade_local(unidade_id):
-        data = request.get_json(force=True)
-        nome = (data.get("nome") or "").strip()
-        if not nome:
-            return jsonify({"erro": "nome e obrigatorio"}), 400
+        data = v.corpo_json()
+        nome = v.texto(data.get("nome"), "nome", 120, obrigatorio=True)
 
         atualizada = db.execute(
             "UPDATE unidades SET nome=%s, tipo=%s WHERE id=%s RETURNING *",
-            (nome, data.get("tipo"), unidade_id)
+            (nome, v.texto(data.get("tipo"), "tipo", 60), unidade_id)
         )
+        if not atualizada:
+            return jsonify({"erro": "unidade nao encontrada"}), 404
         return jsonify(atualizada)
 
     @app.route("/api/unidades-locais/<int:unidade_id>", methods=["DELETE"])
@@ -1623,8 +1776,10 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def api_editar_tipo_clinica(isn_clinica):
-        data = request.get_json(force=True)
-        tipo = (data.get("tipo") or "").strip() or None
+        data = v.corpo_json()
+        tipo = v.texto(data.get("tipo"), "tipo", 60)
+        if isn_clinica not in UNIDADES_PERMITIDAS:
+            return jsonify({"erro": "clinica nao encontrada"}), 404
 
         atualizado = db.execute(
             """INSERT INTO clinicas_tipo (isn_clinica, tipo, atualizado_em)
@@ -1641,46 +1796,53 @@ def register_routes(app):
     @app.route("/api/profissionais", methods=["GET"])
     @login_required
     def api_listar_profissionais():
-        return jsonify(db.query("SELECT * FROM profissionais ORDER BY nome"))
+        rows = db.query("SELECT * FROM profissionais ORDER BY nome")
+        return jsonify(decifrar_campos(rows, "telefone", "email"))
+
+    def campos_profissional(data):
+        """Valida o corpo de criar/editar profissional. Telefone e e-mail
+        (dados pessoais) sao gravados cifrados."""
+        uf = v.texto(data.get("uf_conselho"), "UF do conselho", 2)
+        return (
+            v.texto(data.get("nome"), "nome", 150, obrigatorio=True),
+            v.texto(data.get("categoria"), "categoria", 60, obrigatorio=True),
+            v.texto(data.get("conselho"), "conselho", 20),
+            v.texto(data.get("numero_conselho"), "numero do conselho", 30),
+            v.escolha(uf.upper() if uf else None, "UF do conselho", UFS),
+            cifrar_campo(v.texto(data.get("telefone"), "telefone", 20)),
+            cifrar_campo(v.email(data.get("email"))),
+            v.inteiro(data.get("isn_profissional"), "isn_profissional", minimo=1),
+            v.texto(data.get("cbo"), "CBO", 20),
+        )
 
     @app.route("/api/profissionais", methods=["POST"])
     @login_required
     @perfil_required("admin")
     def api_criar_profissional():
-        data = request.get_json(force=True)
-        nome = data.get("nome", "").strip()
-        categoria = data.get("categoria", "").strip()
-
-        if not nome or not categoria:
-            return jsonify({"erro": "nome e categoria sao obrigatorios"}), 400
-
         novo = db.execute(
             """INSERT INTO profissionais
                 (nome, categoria, conselho, numero_conselho, uf_conselho, telefone, email,
                  isn_profissional, cbo)
                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
-            (nome, categoria, data.get("conselho"), data.get("numero_conselho"),
-             data.get("uf_conselho"), data.get("telefone"), data.get("email"),
-             data.get("isn_profissional") or None, data.get("cbo"))
+            campos_profissional(v.corpo_json())
         )
-        return jsonify(novo), 201
+        return jsonify(decifrar_campos(novo, "telefone", "email")), 201
 
     @app.route("/api/profissionais/<int:profissional_id>", methods=["PUT"])
     @login_required
     @perfil_required("admin")
     def api_editar_profissional(profissional_id):
-        data = request.get_json(force=True)
+        data = v.corpo_json()
         atualizado = db.execute(
             """UPDATE profissionais
                SET nome=%s, categoria=%s, conselho=%s, numero_conselho=%s,
                    uf_conselho=%s, telefone=%s, email=%s, isn_profissional=%s, cbo=%s, ativo=%s
                WHERE id=%s RETURNING *""",
-            (data.get("nome"), data.get("categoria"), data.get("conselho"),
-             data.get("numero_conselho"), data.get("uf_conselho"), data.get("telefone"),
-             data.get("email"), data.get("isn_profissional") or None, data.get("cbo"),
-             data.get("ativo", True), profissional_id)
+            campos_profissional(data) + (v.booleano(data.get("ativo"), "ativo", True), profissional_id)
         )
-        return jsonify(atualizado)
+        if not atualizado:
+            return jsonify({"erro": "profissional nao encontrado"}), 404
+        return jsonify(decifrar_campos(atualizado, "telefone", "email"))
 
     @app.route("/api/profissionais/<int:profissional_id>", methods=["DELETE"])
     @login_required
@@ -1695,7 +1857,7 @@ def register_routes(app):
     @app.route("/api/procedimentos-sigtap", methods=["GET"])
     @login_required
     def api_listar_procedimentos_sigtap():
-        busca = (request.args.get("q") or "").strip()
+        busca = v.termo_busca(request.args.get("q"))
         sql = "SELECT * FROM procedimentos_sigtap"
         params = []
         if busca:
@@ -1708,11 +1870,9 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def api_criar_procedimento_sigtap():
-        data = request.get_json(force=True)
-        codigo = (data.get("codigo") or "").strip()
-        descricao = (data.get("descricao") or "").strip()
-        if not codigo or not descricao:
-            return jsonify({"erro": "codigo e descricao sao obrigatorios"}), 400
+        data = v.corpo_json()
+        codigo = v.texto(data.get("codigo"), "codigo", 20, obrigatorio=True)
+        descricao = v.texto(data.get("descricao"), "descricao", 255, obrigatorio=True)
 
         try:
             novo = db.execute(
@@ -1728,12 +1888,20 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def api_editar_procedimento_sigtap(procedimento_id):
-        data = request.get_json(force=True)
-        atualizado = db.execute(
-            """UPDATE procedimentos_sigtap SET codigo=%s, descricao=%s, ativo=%s
-               WHERE id=%s RETURNING *""",
-            (data.get("codigo"), data.get("descricao"), data.get("ativo", True), procedimento_id)
-        )
+        data = v.corpo_json()
+        try:
+            atualizado = db.execute(
+                """UPDATE procedimentos_sigtap SET codigo=%s, descricao=%s, ativo=%s
+                   WHERE id=%s RETURNING *""",
+                (v.texto(data.get("codigo"), "codigo", 20, obrigatorio=True),
+                 v.texto(data.get("descricao"), "descricao", 255, obrigatorio=True),
+                 v.booleano(data.get("ativo"), "ativo", True), procedimento_id)
+            )
+        except psycopg2.errors.UniqueViolation:
+            db.get_conn().rollback()
+            return jsonify({"erro": "codigo SIGTAP ja cadastrado"}), 409
+        if not atualizado:
+            return jsonify({"erro": "procedimento nao encontrado"}), 404
         return jsonify(atualizado)
 
     @app.route("/api/procedimentos-sigtap/<int:procedimento_id>", methods=["DELETE"])
@@ -1756,6 +1924,9 @@ def register_routes(app):
     @app.route("/api/prontuarios/<int:prontuario_id>/procedimentos", methods=["GET"])
     @login_required
     def api_listar_procedimentos_prontuario(prontuario_id):
+        _, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
         rows = db.query(
             """SELECT pp.id, pp.quantidade, pp.criado_em,
                       ps.codigo, ps.descricao,
@@ -1772,23 +1943,29 @@ def register_routes(app):
     @app.route("/api/prontuarios/<int:prontuario_id>/procedimentos", methods=["POST"])
     @login_required
     def api_incluir_procedimento_prontuario(prontuario_id):
-        data = request.get_json(force=True)
-        procedimento_id = data.get("procedimento_id")
-        if not procedimento_id:
-            return jsonify({"erro": "procedimento_id e obrigatorio"}), 400
+        data = v.corpo_json()
+        procedimento_id = v.inteiro(data.get("procedimento_id"), "procedimento_id", obrigatorio=True, minimo=1)
+        quantidade = v.inteiro(data.get("quantidade"), "quantidade", minimo=1, maximo=999, padrao=1)
+        _, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
+        if not db.query("SELECT 1 FROM procedimentos_sigtap WHERE id = %s AND ativo = TRUE",
+                        (procedimento_id,), fetchone=True):
+            return jsonify({"erro": "procedimento nao encontrado"}), 404
 
-        novo = db.execute(
+        db.execute(
             """INSERT INTO prontuario_procedimentos (prontuario_id, procedimento_id, quantidade, usuario_id)
                VALUES (%s,%s,%s,%s) RETURNING id""",
-            (prontuario_id, procedimento_id, data.get("quantidade", 1), session["usuario_id"])
+            (prontuario_id, procedimento_id, quantidade, session["usuario_id"])
         )
-        if not novo:
-            return jsonify({"erro": "procedimento nao encontrado"}), 404
         return jsonify({"ok": True}), 201
 
     @app.route("/api/prontuarios/<int:prontuario_id>/procedimentos/<int:item_id>", methods=["DELETE"])
     @login_required
     def api_excluir_procedimento_prontuario(prontuario_id, item_id):
+        _, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
         db.execute(
             "DELETE FROM prontuario_procedimentos WHERE id = %s AND prontuario_id = %s",
             (item_id, prontuario_id)
@@ -1818,63 +1995,88 @@ def register_routes(app):
             row["unidade_nome"] = ", ".join(
                 mapa_nomes.get(i, str(i)) for i in row["unidade_ids"]
             ) or None
-        return jsonify(rows)
+        return jsonify(decifrar_campos(rows, "email"))
+
+    def campos_usuario(data):
+        """Valida nome/e-mail/perfil/tela inicial/unidades de um usuario."""
+        perfil = v.texto(data.get("perfil"), "perfil", 30, padrao="operador")
+        if not db.query("SELECT 1 FROM perfis WHERE nome = %s AND ativo = TRUE", (perfil,), fetchone=True):
+            raise v.EntradaInvalida("perfil invalido")
+        tela_inicial = v.escolha(data.get("tela_inicial"), "tela inicial",
+                                 {chave for chave, _ in PAGINAS_SELECIONAVEIS})
+        return {
+            "nome": v.texto(data.get("nome"), "nome", 150, obrigatorio=True),
+            "email": cifrar_campo(v.email(data.get("email"))),
+            "perfil": perfil,
+            "tela_inicial": tela_inicial,
+            "unidade_ids": v.lista_inteiros(data.get("unidade_ids"), "unidades"),
+        }
 
     @app.route("/api/usuarios", methods=["POST"])
     @login_required
     @perfil_required("admin")
     def api_criar_usuario():
-        data = request.get_json(force=True)
-        nome = data.get("nome", "").strip()
-        login_novo = data.get("login", "").strip()
-        senha = data.get("senha", "")
-        perfil = data.get("perfil", "operador")
-
-        if not nome or not login_novo or not senha:
-            return jsonify({"erro": "nome, login e senha sao obrigatorios"}), 400
-
-        tela_inicial = data.get("tela_inicial") or None
-        if tela_inicial and tela_inicial not in {chave for chave, _ in PAGINAS_SELECIONAVEIS}:
-            return jsonify({"erro": "tela inicial invalida"}), 400
-
-        senha_hash = generate_password_hash(senha)
-        novo = db.execute(
-            """INSERT INTO usuarios (nome, login, email, senha_hash, perfil, tela_inicial)
-               VALUES (%s,%s,%s,%s,%s,%s)
-               RETURNING id, nome, login, email, perfil, ativo, tela_inicial""",
-            (nome, login_novo, data.get("email"), senha_hash, perfil, tela_inicial)
-        )
-        salvar_unidades_usuario(novo["id"], data.get("unidade_ids"))
-        return jsonify(novo), 201
+        data = v.corpo_json()
+        campos = campos_usuario(data)
+        login_novo = v.login(data.get("login"))
+        senha_hash = generate_password_hash(v.senha(data.get("senha")))
+        try:
+            novo = db.execute(
+                """INSERT INTO usuarios (nome, login, email, senha_hash, perfil, tela_inicial)
+                   VALUES (%s,%s,%s,%s,%s,%s)
+                   RETURNING id, nome, login, email, perfil, ativo, tela_inicial""",
+                (campos["nome"], login_novo, campos["email"], senha_hash,
+                 campos["perfil"], campos["tela_inicial"])
+            )
+        except psycopg2.errors.UniqueViolation:
+            db.get_conn().rollback()
+            return jsonify({"erro": "ja existe um usuario com esse login"}), 409
+        salvar_unidades_usuario(novo["id"], campos["unidade_ids"])
+        return jsonify(decifrar_campos(novo, "email")), 201
 
     @app.route("/api/usuarios/<int:usuario_id>", methods=["PUT"])
     @login_required
     @perfil_required("admin")
     def api_editar_usuario(usuario_id):
-        data = request.get_json(force=True)
-        if data.get("senha"):
-            senha_hash = generate_password_hash(data["senha"])
-            db.execute("UPDATE usuarios SET senha_hash = %s WHERE id = %s", (senha_hash, usuario_id))
+        data = v.corpo_json()
+        campos = campos_usuario(data)
+        ativo = v.booleano(data.get("ativo"), "ativo", True)
+        nova_senha = v.senha(data.get("senha"), obrigatoria=False)
 
-        tela_inicial = data.get("tela_inicial") or None
-        if tela_inicial and tela_inicial not in {chave for chave, _ in PAGINAS_SELECIONAVEIS}:
-            return jsonify({"erro": "tela inicial invalida"}), 400
+        atual = db.query("SELECT perfil, ativo FROM usuarios WHERE id = %s", (usuario_id,), fetchone=True)
+        if not atual:
+            return jsonify({"erro": "usuario nao encontrado"}), 404
+        if usuario_id == session.get("usuario_id") and (not ativo or campos["perfil"] != "admin"):
+            return jsonify({"erro": "voce nao pode inativar nem tirar o perfil admin do seu proprio usuario"}), 400
 
+        if nova_senha:
+            db.execute("UPDATE usuarios SET senha_hash = %s WHERE id = %s",
+                       (generate_password_hash(nova_senha), usuario_id))
+        # Senha, perfil ou status mudaram: encerra as sessoes abertas desse usuario.
+        encerrar_sessoes = bool(nova_senha) or campos["perfil"] != atual["perfil"] or ativo != atual["ativo"]
         atualizado = db.execute(
-            """UPDATE usuarios SET nome=%s, email=%s, perfil=%s, ativo=%s, tela_inicial=%s
+            """UPDATE usuarios SET nome=%s, email=%s, perfil=%s, ativo=%s, tela_inicial=%s,
+                      sessao_versao = sessao_versao + %s
                WHERE id=%s
                RETURNING id, nome, login, email, perfil, ativo, tela_inicial""",
-            (data.get("nome"), data.get("email"), data.get("perfil"),
-             data.get("ativo", True), tela_inicial, usuario_id)
+            (campos["nome"], campos["email"], campos["perfil"], ativo, campos["tela_inicial"],
+             1 if encerrar_sessoes and usuario_id != session.get("usuario_id") else 0, usuario_id)
         )
-        salvar_unidades_usuario(usuario_id, data.get("unidade_ids"))
-        return jsonify(atualizado)
+        if usuario_id == session.get("usuario_id") and nova_senha:
+            # Trocou a propria senha: as outras sessoes caem, esta continua.
+            db.execute("UPDATE usuarios SET sessao_versao = sessao_versao + 1 WHERE id = %s", (usuario_id,))
+            session["sessao_versao"] = session.get("sessao_versao", 0) + 1
+        salvar_unidades_usuario(usuario_id, campos["unidade_ids"])
+        return jsonify(decifrar_campos(atualizado, "email"))
 
     @app.route("/api/usuarios/<int:usuario_id>", methods=["DELETE"])
     @login_required
     @perfil_required("admin")
     def api_excluir_usuario(usuario_id):
-        db.execute("UPDATE usuarios SET ativo = FALSE WHERE id = %s", (usuario_id,))
+        if usuario_id == session.get("usuario_id"):
+            return jsonify({"erro": "voce nao pode inativar o seu proprio usuario"}), 400
+        db.execute("UPDATE usuarios SET ativo = FALSE, sessao_versao = sessao_versao + 1 WHERE id = %s",
+                   (usuario_id,))
         return jsonify({"ok": True})
 
     @app.route("/api/usuarios/<int:usuario_id>/ativar", methods=["POST"])
@@ -1904,12 +2106,14 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def api_criar_perfil():
-        data = request.get_json(force=True)
-        nome = (data.get("nome") or "").strip().lower().replace(" ", "_")
-        paginas = [p for p in (data.get("paginas") or []) if p in dict(PAGINAS_SELECIONAVEIS)]
+        data = v.corpo_json()
+        nome = (v.texto(data.get("nome"), "nome", 30) or "").lower().replace(" ", "_")
+        paginas = v.lista_textos(data.get("paginas"), "paginas", dict(PAGINAS_SELECIONAVEIS))
 
         if not nome:
             return jsonify({"erro": "nome e obrigatorio"}), 400
+        if not re.fullmatch(r"[a-z0-9_]+", nome):
+            return jsonify({"erro": "nome deve ter apenas letras sem acento, numeros e _"}), 400
         if nome == "admin":
             return jsonify({"erro": "nome reservado"}), 400
 
@@ -1937,9 +2141,9 @@ def register_routes(app):
         if atual["protegido"]:
             return jsonify({"erro": "perfil protegido nao pode ser alterado"}), 400
 
-        data = request.get_json(force=True)
-        ativo = data.get("ativo", atual["ativo"])
-        paginas = [p for p in (data.get("paginas") or []) if p in dict(PAGINAS_SELECIONAVEIS)]
+        data = v.corpo_json()
+        ativo = v.booleano(data.get("ativo"), "ativo", atual["ativo"])
+        paginas = v.lista_textos(data.get("paginas"), "paginas", dict(PAGINAS_SELECIONAVEIS))
 
         db.execute("UPDATE perfis SET ativo = %s WHERE id = %s", (ativo, perfil_id))
         db.execute("DELETE FROM perfil_paginas WHERE perfil_id = %s", (perfil_id,))
@@ -2102,4 +2306,7 @@ def register_routes(app):
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5500)
+    # O modo debug do Flask abre um console Python no navegador quando ocorre
+    # um erro: so liga com FLASK_DEBUG=1 e, nesse caso, apenas nesta maquina.
+    modo_debug = os.environ.get("FLASK_DEBUG", "").strip().lower() in ("1", "true")
+    app.run(debug=modo_debug, host="127.0.0.1" if modo_debug else "0.0.0.0", port=5500)

@@ -1,2 +1,9 @@
 .venv/
 __pycache__/
+*.pyc
+
+# Segredos: NUNCA versionar (use o .env.example como modelo)
+.env
+.env.*
+!.env.example
+instance/

@@ -96,19 +96,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function acoesPendencia(p) {
   if (p.status === "aberta" || p.status === "em_analise") {
-    return `<button class="btn btn-primario btn-sm" onclick="resolverPendencia(${p.id})">Resolver</button>`;
+    return `<button class="btn btn-primario btn-sm" onclick="resolverPendencia(${esc(p.id)})">Resolver</button>`;
   }
   if (p.status === "resolvida") {
     const info = `<div class="texto-suave" style="margin-bottom:6px;">
-      ${p.usuario_resolucao_nome || "-"} · ${formatarData(p.data_resolucao)}
+      ${esc(p.usuario_resolucao_nome || "-")} · ${esc(formatarData(p.data_resolucao))}
     </div>`;
     if (USUARIO_PERFIL === "operador") return info;
     return `${info}
-      <button class="btn btn-primario btn-sm" onclick="confirmarPendencia(${p.id})">Confirmar</button>
-      <button class="btn btn-perigo btn-sm" onclick="devolverPendencia(${p.id})">Devolver</button>`;
+      <button class="btn btn-primario btn-sm" onclick="confirmarPendencia(${esc(p.id)})">Confirmar</button>
+      <button class="btn btn-perigo btn-sm" onclick="devolverPendencia(${esc(p.id)})">Devolver</button>`;
   }
   // confirmada
-  return `<span class="texto-suave">${p.usuario_resolucao_nome || "-"} · ${formatarData(p.data_resolucao)}</span>`;
+  return `<span class="texto-suave">${esc(p.usuario_resolucao_nome || "-")} · ${esc(formatarData(p.data_resolucao))}</span>`;
 }
 
 async function carregarPendencias() {
@@ -122,20 +122,20 @@ async function carregarPendencias() {
     }
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td>${p.tipo_descricao || "-"}</td>
-        <td>${p.unidade_nome || "-"}</td>
-        <td>${p.profissional || "-"}</td>
-        <td>${formatarDataSimples(p.data_ocorrencia)}</td>
+        <td>${esc(p.tipo_descricao || "-")}</td>
+        <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${esc(p.profissional || "-")}</td>
+        <td>${esc(formatarDataSimples(p.data_ocorrencia))}</td>
         <td>${badgeCriticidade(p.criticidade)}</td>
-        <td style="max-width:320px;">${p.descricao}</td>
+        <td style="max-width:320px;">${esc(p.descricao)}</td>
         <td>${badgeStatusPendencia(p.status)}</td>
-        <td>${formatarData(p.data_abertura)}</td>
+        <td>${esc(formatarData(p.data_abertura))}</td>
         <td>${formatarTimerHorasUteis(p.horas_uteis_desde_abertura)}</td>
-        <td class="acoes-linha">${acoesPendencia(p)}</td>
+        <td class="acoes-linha">${esc(acoesPendencia(p))}</td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -180,12 +180,12 @@ async function carregarHistorico() {
     container.innerHTML = historico.map(h => `
       <div style="padding:10px 0; border-bottom:1px solid var(--cor-borda);">
         <strong>${badgeStatus(h.origem)} → ${badgeStatus(h.destino)}</strong>
-        <div class="texto-suave" style="margin-top:4px;">${formatarData(h.data_movimentacao)} · ${h.usuario_nome || "Sistema"}</div>
-        ${h.observacao ? `<div style="margin-top:4px;">${h.observacao}</div>` : ""}
+        <div class="texto-suave" style="margin-top:4px;">${esc(formatarData(h.data_movimentacao))} · ${esc(h.usuario_nome || "Sistema")}</div>
+        ${h.observacao ? `<div style="margin-top:4px;">${esc(h.observacao)}</div>` : ""}
       </div>
     `).join("");
   } catch (e) {
-    container.innerHTML = `<p class="vazio-estado">Erro: ${e.message}</p>`;
+    container.innerHTML = `<p class="vazio-estado">Erro: ${esc(e.message)}</p>`;
   }
 }
 
@@ -199,14 +199,14 @@ async function carregarProcedimentos() {
     }
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${p.codigo}</strong></td>
-        <td>${p.descricao}</td>
-        <td>${p.quantidade}</td>
-        <td>${formatarData(p.criado_em)}</td>
-        <td>${p.usuario_nome || "-"}</td>
+        <td><strong>${esc(p.codigo)}</strong></td>
+        <td>${esc(p.descricao)}</td>
+        <td>${esc(p.quantidade)}</td>
+        <td>${esc(formatarData(p.criado_em))}</td>
+        <td>${esc(p.usuario_nome || "-")}</td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }

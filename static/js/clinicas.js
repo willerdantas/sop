@@ -69,17 +69,17 @@ async function carregar() {
     }
     tbody.innerHTML = lista.map((u) => `
       <tr>
-        <td><strong>${u.nome}</strong></td>
-        <td>${u.codigo || "-"}</td>
-        <td>${u.tipo || "-"}</td>
+        <td><strong>${esc(u.nome)}</strong></td>
+        <td>${esc(u.codigo || "-")}</td>
+        <td>${esc(u.tipo || "-")}</td>
         <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick='editarClinicaLocal(${JSON.stringify(u)})'>Editar</button>
-          <button class="btn btn-perigo btn-sm" onclick="excluirClinicaLocal(${u.id})">Desativar</button>
+          <button class="btn btn-outline btn-sm" onclick='editarClinicaLocal(${argJs(u)})'>Editar</button>
+          <button class="btn btn-perigo btn-sm" onclick="excluirClinicaLocal(${esc(u.id)})">Desativar</button>
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="4" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

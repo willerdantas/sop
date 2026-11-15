@@ -41,6 +41,11 @@
     {% endwith %}
 
     <form method="POST" action="{{ url_for('login') }}" data-nav-loading style="width:100%;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div aria-hidden="true" style="position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden;">
+        <label for="{{ campo_isca }}">Não preencha este campo</label>
+        <input type="text" id="{{ campo_isca }}" name="{{ campo_isca }}" tabindex="-1" autocomplete="off">
+      </div>
       <div class="campo">
         <label for="login">Usuário</label>
         <input type="text" id="login" name="login" required autofocus placeholder="seu.login">

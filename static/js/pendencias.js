@@ -44,20 +44,20 @@ async function carregar() {
     }
     tbody.innerHTML = lista.map((t) => `
       <tr>
-        <td><strong>${t.descricao}</strong></td>
-        <td>${t.setor_responsavel || "-"}</td>
+        <td><strong>${esc(t.descricao)}</strong></td>
+        <td>${esc(t.setor_responsavel || "-")}</td>
         <td>${badgeCriticidade(t.criticidade)}</td>
         <td>${t.ativo ? '<span class="badge badge-ok">Ativo</span>' : '<span class="badge badge-pendencia">Inativo</span>'}</td>
         <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick='editarTipoPendencia(${JSON.stringify(t)})'>Editar</button>
+          <button class="btn btn-outline btn-sm" onclick='editarTipoPendencia(${argJs(t)})'>Editar</button>
           ${t.ativo
-            ? `<button class="btn btn-perigo btn-sm" onclick="excluirTipoPendencia(${t.id})">Desativar</button>`
-            : `<button class="btn btn-primario btn-sm" onclick="ativarTipoPendencia(${t.id})">Ativar</button>`}
+            ? `<button class="btn btn-perigo btn-sm" onclick="excluirTipoPendencia(${esc(t.id)})">Desativar</button>`
+            : `<button class="btn btn-primario btn-sm" onclick="ativarTipoPendencia(${esc(t.id)})">Ativar</button>`}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

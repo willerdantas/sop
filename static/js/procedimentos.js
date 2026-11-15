@@ -52,19 +52,19 @@ async function carregar() {
     }
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${p.codigo}</strong></td>
-        <td>${p.descricao}</td>
+        <td><strong>${esc(p.codigo)}</strong></td>
+        <td>${esc(p.descricao)}</td>
         <td>${p.ativo ? '<span class="badge badge-ok">Ativo</span>' : '<span class="badge badge-pendencia">Inativo</span>'}</td>
         <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick='editarProcedimento(${JSON.stringify(p)})'>Editar</button>
+          <button class="btn btn-outline btn-sm" onclick='editarProcedimento(${argJs(p)})'>Editar</button>
           ${p.ativo
-            ? `<button class="btn btn-perigo btn-sm" onclick="excluirProcedimento(${p.id})">Desativar</button>`
-            : `<button class="btn btn-primario btn-sm" onclick="ativarProcedimento(${p.id})">Ativar</button>`}
+            ? `<button class="btn btn-perigo btn-sm" onclick="excluirProcedimento(${esc(p.id)})">Desativar</button>`
+            : `<button class="btn btn-primario btn-sm" onclick="ativarProcedimento(${esc(p.id)})">Ativar</button>`}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="4" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

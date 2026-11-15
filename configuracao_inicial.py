@@ -27,6 +27,7 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import db
+import seguranca
 from config import SCHEMA_VALIDO, ler_integra_schema, ler_urls_banco
 from crypto_utils import cifrar
 
@@ -45,6 +46,9 @@ SENHA_TAMANHO_MINIMO = 8
 CAMPOS_CONEXAO = ("host", "porta", "banco", "usuario", "senha")
 
 bp = Blueprint("configuracao", __name__, url_prefix="/configuracao")
+
+# Senha da configuracao inicial: no maximo 5 erros a cada 15 minutos por IP.
+_limitador_entrar = seguranca.LimitadorMemoria(maximo=5, janela_segundos=15 * 60)
 
 _estado = {
     "ativo": False,          # True = banco indisponivel, app em modo de configuracao
@@ -207,10 +211,17 @@ def entrar():
         return redirect(url_for("configuracao.inicio"))
 
     if request.method == "POST":
-        if check_password_hash(_hash_senha_admin(), request.form.get("senha", "")):
+        ip = seguranca.ip_cliente()
+        espera = _limitador_entrar.segundos_bloqueio(ip)
+        if espera:
+            flash(f"Muitas tentativas. Aguarde {(espera + 59) // 60} minuto(s).", "erro")
+            return render_template("configuracao.html", etapa="entrar"), 429
+        if check_password_hash(_hash_senha_admin(), request.form.get("senha", "")[:128]):
+            _limitador_entrar.limpar(ip)
             session.clear()
             session["setup_admin"] = True
             return redirect(url_for("configuracao.banco"))
+        _limitador_entrar.registrar_falha(ip)
         flash("Senha inválida.", "erro")
 
     return render_template("configuracao.html", etapa="entrar")

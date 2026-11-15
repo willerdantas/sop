@@ -73,7 +73,7 @@ async function carregarSOP() {
     renderizarTabela(lista);
     atualizarKpis(lista);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -99,21 +99,21 @@ async function buscarInternacoesPorProntuario() {
 
     tbody.innerHTML = lista.map((i) => `
       <tr>
-        <td>${i.isn_internacao}</td>
-        <td>${i.paciente_nome}</td>
-        <td>${formatarDataSimples(i.dat_internacao)}</td>
+        <td>${esc(i.isn_internacao)}</td>
+        <td>${esc(i.paciente_nome)}</td>
+        <td>${esc(formatarDataSimples(i.dat_internacao))}</td>
         <td>${i.dat_alta ? formatarDataSimples(i.dat_alta) : '<span class="texto-suave">em andamento</span>'}</td>
-        <td>${i.dsc_destino ? `<span class="badge ${DESTINO_BADGE_CLASSE[i.dsc_destino] || "badge-unidade"}">${i.dsc_destino}</span>` : "-"}</td>
-        <td>${i.dsc_motivo_alta || "-"}</td>
+        <td>${i.dsc_destino ? `<span class="badge ${esc(DESTINO_BADGE_CLASSE[i.dsc_destino] || "badge-unidade")}">${esc(i.dsc_destino)}</span>` : "-"}</td>
+        <td>${esc(i.dsc_motivo_alta || "-")}</td>
         <td class="acoes-linha">
           ${i.status_atual
             ? badgeStatus(i.status_atual)
-            : `<button class="btn btn-laranja btn-sm" onclick="registrarInternacao(${i.isn_internacao_leito})">Registrar no Fluxo</button>`}
+            : `<button class="btn btn-laranja btn-sm" onclick="registrarInternacao(${esc(i.isn_internacao_leito)})">Registrar no Fluxo</button>`}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao buscar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao buscar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -140,21 +140,21 @@ function renderizarTabela(lista) {
 
   tbody.innerHTML = lista.map((p) => `
     <tr>
-      <td><strong>${p.numero_prontuario}</strong></td>
-      <td>${p.paciente_nome}</td>
-      <td>${p.unidade_nome || "-"}</td>
+      <td><strong>${esc(p.numero_prontuario)}</strong></td>
+      <td>${esc(p.paciente_nome)}</td>
+      <td>${esc(p.unidade_nome || "-")}</td>
       <td>${p.prioridade === "urgente" ? '<span class="badge badge-pendencia">Urgente</span>' : "Normal"}</td>
-      <td>${p.localizacao_fisica || "-"}</td>
+      <td>${esc(p.localizacao_fisica || "-")}</td>
       <td>${p.pendencias_abertas > 0
-          ? `<span class="badge badge-pendencia">${p.pendencias_abertas} aberta(s)</span>`
+          ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
           : `<span class="badge badge-ok">Sem pendência</span>`}</td>
-      <td>${formatarData(p.atualizado_em)}</td>
+      <td>${esc(formatarData(p.atualizado_em))}</td>
       <td>${formatarTimerSOP(p.horas_uteis_no_sop)}</td>
       <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
       <td class="acoes-linha">
-        <button class="btn btn-outline btn-sm" onclick="location.href='/analise/${p.id}'">Analisar</button>
-        <button class="btn btn-outline btn-sm" onclick="enviarParaUnidade(${p.id})">Enviar p/ Unidade</button>
-        <button class="btn btn-primario btn-sm" onclick="enviarParaContasMedicas(${p.id}, ${p.pendencias_abertas})">
+        <button class="btn btn-outline btn-sm" onclick="location.href='/analise/${esc(p.id)}'">Analisar</button>
+        <button class="btn btn-outline btn-sm" onclick="enviarParaUnidade(${esc(p.id)})">Enviar p/ Unidade</button>
+        <button class="btn btn-primario btn-sm" onclick="enviarParaContasMedicas(${esc(p.id)}, ${esc(p.pendencias_abertas)})">
           Enviar p/ Contas Médicas
         </button>
       </td>
@@ -277,25 +277,25 @@ async function carregarAltas(pagina) {
 
     tbody.innerHTML = lista.map((a) => `
       <tr>
-        <td>${a.isn_internacao}</td>
-        <td>${a.num_prontuario || '<span class="texto-suave">não informado</span>'}</td>
-        <td>${a.paciente_nome}</td>
-        <td>${a.unidade_nome || "-"}</td>
-        <td>${formatarDataSimples(a.dat_internacao)}</td>
-        <td>${formatarDataSimples(a.dat_alta)}${a.hor_alta ? " " + a.hor_alta : ""}</td>
-        <td><span class="badge ${DESTINO_BADGE_CLASSE[a.dsc_destino] || "badge-unidade"}">${a.dsc_destino || "-"}</span></td>
-        <td>${a.dsc_motivo_alta || "-"}</td>
+        <td>${esc(a.isn_internacao)}</td>
+        <td>${a.num_prontuario ? esc(a.num_prontuario) : '<span class="texto-suave">não informado</span>'}</td>
+        <td>${esc(a.paciente_nome)}</td>
+        <td>${esc(a.unidade_nome || "-")}</td>
+        <td>${esc(formatarDataSimples(a.dat_internacao))}</td>
+        <td>${esc(formatarDataSimples(a.dat_alta))}${esc(a.hor_alta ? " " + a.hor_alta : "")}</td>
+        <td><span class="badge ${esc(DESTINO_BADGE_CLASSE[a.dsc_destino] || "badge-unidade")}">${esc(a.dsc_destino || "-")}</span></td>
+        <td>${esc(a.dsc_motivo_alta || "-")}</td>
         <td>${formatarTimerHorasUteis(a.horas_uteis_desde_alta)}</td>
         <td>${badgeDiasAlta(a.dias_desde_alta)}</td>
         <td class="acoes-linha">
           ${a.num_prontuario
-            ? `<button class="btn btn-laranja btn-sm" onclick="abrirModalRegistrarAlta(${a.isn_internacao_leito})">Registrar no Fluxo</button>`
+            ? `<button class="btn btn-laranja btn-sm" onclick="abrirModalRegistrarAlta(${esc(a.isn_internacao_leito)})">Registrar no Fluxo</button>`
             : `<button class="btn btn-ghost btn-sm" disabled title="Sem número de prontuário no sistema hospitalar">Registrar no Fluxo</button>`}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="11" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -334,16 +334,16 @@ async function carregarEnviadosContas() {
 
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${p.numero_prontuario}</strong></td>
-        <td>${p.paciente_nome}</td>
-        <td>${p.unidade_nome || "-"}</td>
+        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td>${esc(p.unidade_nome || "-")}</td>
         <td>${p.pendencias_abertas > 0
-            ? `<span class="badge badge-pendencia">${p.pendencias_abertas} aberta(s)</span>`
+            ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
-        <td>${formatarData(p.atualizado_em)}</td>
+        <td>${esc(formatarData(p.atualizado_em))}</td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }

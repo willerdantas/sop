@@ -9,10 +9,12 @@ para o banco do sistema hospitalar (ISIVITA/SESA - isivitaedb_hm),
 usado para consultar unidades e altas. Esse banco e o sistema de
 registro oficial do hospital e NUNCA deve ser alterado por aqui.
 """
+import os
+
 import psycopg2
 import psycopg2.extras
 import psycopg2.pool
-from flask import g
+from flask import g, has_request_context, session
 
 from config import SCHEMA_VALIDO
 
@@ -87,7 +89,20 @@ def preparar_banco(dsn, caminho_schema):
         conn.commit()
     except (psycopg2.Error, UnicodeDecodeError, OSError) as exc:
         conn.rollback()
+        conn.close()
         return f"Erro ao criar as tabelas: {_mensagem_erro(exc)}", acoes
+
+    # Ajustes de seguranca (idempotentes): rodam a cada inicio. Falha aqui nao
+    # derruba a app - ex: usuario do banco sem permissao de ALTER TABLE (caso
+    # do usuario restrito de sql/permissoes.sql, que ja encontra tudo pronto).
+    caminho_seguranca = os.path.join(os.path.dirname(caminho_schema), "seguranca.sql")
+    try:
+        with conn.cursor() as cur, open(caminho_seguranca, encoding="utf-8") as arquivo:
+            cur.execute(arquivo.read())
+        conn.commit()
+    except (psycopg2.Error, UnicodeDecodeError, OSError) as exc:
+        conn.rollback()
+        print(f"[aviso] ajustes de seguranca do banco nao aplicados: {_mensagem_erro(exc)}")
     finally:
         conn.close()
     return None, acoes
@@ -225,7 +240,36 @@ def get_conn():
     if "db_conn" not in g:
         g.db_pool = _pool
         g.db_conn = _pool.getconn()
+        aplicar_contexto_rls()
     return g.db_conn
+
+
+def _unidades_da_sessao():
+    """Unidades que limitam o acesso do usuario logado ("" = sem restricao:
+    admin, usuario sem unidade vinculada ou execucao fora de requisicao)."""
+    if not has_request_context() or session.get("perfil") == "admin":
+        return ""
+    return ",".join(str(int(u)) for u in (session.get("unidade_ids") or []))
+
+
+def aplicar_contexto_rls():
+    """Informa ao Postgres as unidades do usuario da requisicao, lidas pelas
+    politicas de row-level security (sql/seguranca.sql) via
+    current_setting('app.unidade_ids'). Redefinido a cada requisicao, entao
+    uma conexao reaproveitada do pool nunca carrega o valor de outro usuario."""
+    conn = g.get("db_conn")
+    if conn is None:
+        return
+    with conn.cursor() as cur:
+        cur.execute("SELECT set_config('app.unidade_ids', %s, false)", (_unidades_da_sessao(),))
+    conn.commit()
+
+
+def descartar_transacao():
+    """Desfaz a transacao em andamento (usado apos um erro inesperado)."""
+    conn = g.get("db_conn")
+    if conn is not None and not conn.closed:
+        conn.rollback()
 
 
 def get_conn_integra():

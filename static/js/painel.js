@@ -35,7 +35,7 @@ function atualizarContadores(c) {
 
 function badgeEvento(u) {
   if (u.tipo === "alta") {
-    return `<span class="badge badge-media">${u.destino_label}</span>`;
+    return `<span class="badge badge-media">${esc(u.destino_label)}</span>`;
   }
   return badgeStatus(u.destino);
 }
@@ -69,11 +69,11 @@ function atualizarLista(lista) {
 
   tbody.innerHTML = lista.map((u) => `
     <tr>
-      <td><strong>${u.numero_prontuario}</strong></td>
-      <td>${u.paciente_nome}</td>
+      <td><strong>${esc(u.numero_prontuario)}</strong></td>
+      <td>${esc(u.paciente_nome)}</td>
       <td>${badgeEvento(u)}</td>
-      <td>${u.dsc_motivo_alta || "-"}</td>
-      <td>${formatarData(u.data_hora)}</td>
+      <td>${esc(u.dsc_motivo_alta || "-")}</td>
+      <td>${esc(formatarData(u.data_hora))}</td>
       <td>${formatarTimerHorasUteis(u.horas_uteis)}</td>
     </tr>
   `).join("");

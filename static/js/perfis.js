@@ -48,19 +48,19 @@ async function carregar() {
     }
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${p.nome}</strong>${p.protegido ? ' <span class="badge badge-unidade">Protegido</span>' : ""}</td>
-        <td>${p.paginas.length ? p.paginas.join(", ") : '<span class="texto-suave">nenhuma</span>'}</td>
+        <td><strong>${esc(p.nome)}</strong>${p.protegido ? ' <span class="badge badge-unidade">Protegido</span>' : ""}</td>
+        <td>${p.paginas.length ? esc(p.paginas.join(", ")) : '<span class="texto-suave">nenhuma</span>'}</td>
         <td>${p.ativo ? '<span class="badge badge-ok">Ativo</span>' : '<span class="badge badge-pendencia">Inativo</span>'}</td>
         <td class="acoes-linha">
           ${p.protegido ? "" : `
-            <button class="btn btn-outline btn-sm" onclick='editarPerfil(${JSON.stringify(p)})'>Editar</button>
-            <button class="btn btn-perigo btn-sm" onclick="alternarPerfil(${p.id})">${p.ativo ? "Desativar" : "Reativar"}</button>
+            <button class="btn btn-outline btn-sm" onclick='editarPerfil(${argJs(p)})'>Editar</button>
+            <button class="btn btn-perigo btn-sm" onclick="alternarPerfil(${esc(p.id)})">${esc(p.ativo ? "Desativar" : "Reativar")}</button>
           `}
         </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="4" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

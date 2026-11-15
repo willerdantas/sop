@@ -16,7 +16,7 @@ async function carregarPainelMonitoramento() {
     renderizarUsuarios(dados.usuarios);
   } catch (e) {
     document.getElementById("linha-kpis-status").innerHTML =
-      `<div class="kpi-card"><div class="kpi-desc">Erro ao carregar: ${e.message}</div></div>`;
+      `<div class="kpi-card"><div class="kpi-desc">Erro ao carregar: ${esc(e.message)}</div></div>`;
   }
 }
 
@@ -24,8 +24,8 @@ function renderizarStatus(lista) {
   const container = document.getElementById("linha-kpis-status");
   container.innerHTML = lista.map((s) => `
     <div class="kpi-card">
-      <div class="kpi-num">${s.total}</div>
-      <div class="kpi-desc">${s.label}</div>
+      <div class="kpi-num">${esc(s.total)}</div>
+      <div class="kpi-desc">${esc(s.label)}</div>
     </div>
   `).join("");
 }
@@ -38,9 +38,9 @@ function renderizarUsuarios(lista) {
   }
   tbody.innerHTML = lista.map((u) => `
     <tr>
-      <td><strong>${u.nome}</strong></td>
-      <td>${u.em_analise}</td>
-      <td>${u.analisados}</td>
+      <td><strong>${esc(u.nome)}</strong></td>
+      <td>${esc(u.em_analise)}</td>
+      <td>${esc(u.analisados)}</td>
     </tr>
   `).join("");
 }
