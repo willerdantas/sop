@@ -14,8 +14,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("btn-altas-anterior").addEventListener("click", () => carregarAltas(altasPaginaAtual - 1));
   document.getElementById("btn-altas-proxima").addEventListener("click", () => carregarAltas(altasPaginaAtual + 1));
+  document.getElementById("filtro-prazo-altas").addEventListener("change", () => carregarAltas(1));
 
-  document.getElementById("btn-novo-prontuario").addEventListener("click", () => abrirModal("modal-novo-prontuario"));
+  document.getElementById("btn-novo-prontuario").addEventListener("click", () => {
+    document.getElementById("form-buscar-internacao").reset();
+    document.getElementById("tbody-busca-internacoes").innerHTML =
+      `<tr><td colspan="7" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>`;
+    abrirModal("modal-novo-prontuario");
+  });
 
   document.getElementById("form-registrar-alta").addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -35,18 +41,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  document.getElementById("form-novo-prontuario").addEventListener("submit", async (ev) => {
+  document.getElementById("form-buscar-internacao").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const form = ev.target;
-    const dados = Object.fromEntries(new FormData(form).entries());
-    try {
-      await apiFetch("/api/prontuarios", { method: "POST", body: JSON.stringify(dados) });
-      fecharModal("modal-novo-prontuario");
-      form.reset();
-      carregarSOP();
-    } catch (e) {
-      alert(e.message);
-    }
+    await buscarInternacoesPorProntuario();
   });
 
   let timerBusca;
@@ -76,7 +73,7 @@ async function carregarSOP() {
     renderizarTabela(lista);
     atualizarKpis(lista);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
@@ -87,10 +84,57 @@ function atualizarKpis(lista) {
   document.getElementById("kpi-urgentes").textContent = lista.filter(p => p.prioridade === "urgente").length;
 }
 
+async function buscarInternacoesPorProntuario() {
+  const numero = document.getElementById("busca-numero-prontuario").value.trim();
+  const tbody = document.getElementById("tbody-busca-internacoes");
+  if (!numero) return;
+
+  tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Buscando...</td></tr>`;
+  try {
+    const lista = await apiFetch(`/api/internacoes/buscar?numero=${encodeURIComponent(numero)}`);
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhuma internação encontrada para este número de prontuário.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map((i) => `
+      <tr>
+        <td>${i.isn_internacao}</td>
+        <td>${i.paciente_nome}</td>
+        <td>${formatarDataSimples(i.dat_internacao)}</td>
+        <td>${i.dat_alta ? formatarDataSimples(i.dat_alta) : '<span class="texto-suave">em andamento</span>'}</td>
+        <td>${i.dsc_destino ? `<span class="badge ${DESTINO_BADGE_CLASSE[i.dsc_destino] || "badge-unidade"}">${i.dsc_destino}</span>` : "-"}</td>
+        <td>${i.dsc_motivo_alta || "-"}</td>
+        <td class="acoes-linha">
+          ${i.status_atual
+            ? badgeStatus(i.status_atual)
+            : `<button class="btn btn-laranja btn-sm" onclick="registrarInternacao(${i.isn_internacao_leito})">Registrar no Fluxo</button>`}
+        </td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao buscar: ${e.message}</td></tr>`;
+  }
+}
+
+async function registrarInternacao(isnInternacaoLeito) {
+  if (!confirm("Confirmar o registro desta internação no fluxo?")) return;
+  try {
+    await apiFetch(`/api/internacoes/${isnInternacaoLeito}/registrar`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await buscarInternacoesPorProntuario();
+    carregarSOP();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
 function renderizarTabela(lista) {
   const tbody = document.getElementById("tbody-sop");
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário no SOP no momento.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Nenhum prontuário no SOP no momento.</td></tr>`;
     return;
   }
 
@@ -106,6 +150,7 @@ function renderizarTabela(lista) {
           : `<span class="badge badge-ok">Sem pendência</span>`}</td>
       <td>${formatarData(p.atualizado_em)}</td>
       <td>${formatarTimerSOP(p.horas_uteis_no_sop)}</td>
+      <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
       <td class="acoes-linha">
         <button class="btn btn-outline btn-sm" onclick="location.href='/analise/${p.id}'">Analisar</button>
         <button class="btn btn-outline btn-sm" onclick="enviarParaUnidade(${p.id})">Enviar p/ Unidade</button>
@@ -155,16 +200,70 @@ const DESTINO_BADGE_CLASSE = {
   "Óbito": "badge-pendencia",
 };
 
+function formatarHorasTexto(horas) {
+  if (horas === null || horas === undefined) return "-";
+  const horasInt = Math.floor(horas);
+  const minutos = Math.round((horas - horasInt) * 60);
+  return `${horasInt}h ${String(minutos).padStart(2, "0")}min`;
+}
+
+async function buscarTodasAltasParaExportar() {
+  const prazo = document.getElementById("filtro-prazo-altas").value;
+  const params = new URLSearchParams({ exportar: "1" });
+  if (prazo) params.set("prazo", prazo);
+
+  const resp = await apiFetch(`/api/altas?${params.toString()}`);
+  const cabecalhos = [
+    "Nº Internação", "Nº Prontuário", "Paciente", "Unidade", "Internação",
+    "Alta", "Destino", "Motivo Alta", "Tempo", "Dias desde Alta",
+  ];
+  const linhas = resp.itens.map((a) => [
+    a.isn_internacao,
+    a.num_prontuario || "não informado",
+    a.paciente_nome,
+    a.unidade_nome || "-",
+    formatarDataSimples(a.dat_internacao),
+    `${formatarDataSimples(a.dat_alta)}${a.hor_alta ? " " + a.hor_alta : ""}`,
+    a.dsc_destino || "-",
+    a.dsc_motivo_alta || "-",
+    formatarHorasTexto(a.horas_uteis_desde_alta),
+    a.dias_desde_alta !== null && a.dias_desde_alta !== undefined ? `${a.dias_desde_alta} dia(s)` : "-",
+  ]);
+  return { cabecalhos, linhas };
+}
+
+async function exportarAltasPDF() {
+  try {
+    const { cabecalhos, linhas } = await buscarTodasAltasParaExportar();
+    gerarPDF(cabecalhos, linhas, "Altas", "altas");
+  } catch (e) {
+    alert("Erro ao buscar dados para exportar: " + e.message);
+  }
+}
+
+async function exportarAltasExcel() {
+  try {
+    const { cabecalhos, linhas } = await buscarTodasAltasParaExportar();
+    gerarExcel(cabecalhos, linhas, "altas");
+  } catch (e) {
+    alert("Erro ao buscar dados para exportar: " + e.message);
+  }
+}
+
 async function carregarAltas(pagina) {
   const tbody = document.getElementById("tbody-altas");
   const contador = document.getElementById("contador-altas");
   const paginacao = document.getElementById("paginacao-altas");
   try {
-    const resp = await apiFetch(`/api/altas?pagina=${pagina}`);
+    const prazo = document.getElementById("filtro-prazo-altas").value;
+    const params = new URLSearchParams({ pagina });
+    if (prazo) params.set("prazo", prazo);
+    const resp = await apiFetch(`/api/altas?${params.toString()}`);
     const lista = resp.itens;
     altasPaginaAtual = resp.pagina;
     altasCache = Object.fromEntries(lista.map((a) => [a.isn_internacao_leito, a]));
     contador.textContent = `${resp.total} pendente(s)`;
+    document.getElementById("kpi-total-altas").textContent = resp.total;
 
     paginacao.style.display = resp.total_paginas > 1 ? "flex" : "none";
     document.getElementById("altas-pagina-info").textContent = `Página ${resp.pagina} de ${resp.total_paginas}`;
@@ -172,7 +271,7 @@ async function carregarAltas(pagina) {
     document.getElementById("btn-altas-proxima").disabled = resp.pagina >= resp.total_paginas;
 
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhuma alta pendente de registro.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" class="vazio-estado">Nenhuma alta pendente de registro.</td></tr>`;
       return;
     }
 
@@ -185,7 +284,9 @@ async function carregarAltas(pagina) {
         <td>${formatarDataSimples(a.dat_internacao)}</td>
         <td>${formatarDataSimples(a.dat_alta)}${a.hor_alta ? " " + a.hor_alta : ""}</td>
         <td><span class="badge ${DESTINO_BADGE_CLASSE[a.dsc_destino] || "badge-unidade"}">${a.dsc_destino || "-"}</span></td>
+        <td>${a.dsc_motivo_alta || "-"}</td>
         <td>${formatarTimerHorasUteis(a.horas_uteis_desde_alta)}</td>
+        <td>${badgeDiasAlta(a.dias_desde_alta)}</td>
         <td class="acoes-linha">
           ${a.num_prontuario
             ? `<button class="btn btn-laranja btn-sm" onclick="abrirModalRegistrarAlta(${a.isn_internacao_leito})">Registrar no Fluxo</button>`
@@ -194,7 +295,7 @@ async function carregarAltas(pagina) {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
@@ -213,6 +314,7 @@ function abrirModalRegistrarAlta(isn) {
   document.getElementById("alta-data-alta").textContent = `${formatarDataSimples(a.dat_alta)}${a.hor_alta ? " " + a.hor_alta : ""}`;
   document.getElementById("alta-numero-prontuario").textContent = a.num_prontuario;
   document.getElementById("alta-destino").textContent = a.dsc_destino || "-";
+  document.getElementById("alta-motivo").textContent = a.dsc_motivo_alta || "-";
 
   const form = document.getElementById("form-registrar-alta");
   form.reset();

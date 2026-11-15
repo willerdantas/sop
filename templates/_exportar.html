@@ -1,0 +1,11 @@
+{# =========================================================
+   Botoes de exportar PDF/Excel para uma tabela ja renderizada na tela.
+   Uso: {% import "_exportar.html" as exportar %}
+        {{ exportar.botoes('tbody-sop', 'Prontuários no SOP', 'prontuarios_no_sop') }}
+   ========================================================= #}
+{% macro botoes(tabela_id, titulo, arquivo) %}
+<div class="acoes-linha">
+  <button class="btn btn-outline btn-sm" type="button" onclick='exportarPDF("{{ tabela_id }}", {{ titulo | tojson }}, {{ arquivo | tojson }})'>PDF</button>
+  <button class="btn btn-outline btn-sm" type="button" onclick='exportarExcel("{{ tabela_id }}", {{ arquivo | tojson }})'>Excel</button>
+</div>
+{% endmacro %}

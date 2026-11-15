@@ -7,14 +7,25 @@
 
 let pendenciasAbertasCount = 0;
 
+let procedimentoSelecionadoId = null;
+
 document.addEventListener("DOMContentLoaded", () => {
   carregarPendencias();
   carregarHistorico();
+  carregarProcedimentos();
+  configurarBuscaProfissional();
 
-  document.getElementById("btn-nova-pendencia").addEventListener("click", () => abrirModal("modal-nova-pendencia"));
+  document.getElementById("btn-nova-pendencia").addEventListener("click", () => {
+    limparBuscaProfissional();
+    abrirModal("modal-nova-pendencia");
+  });
 
   document.getElementById("form-nova-pendencia").addEventListener("submit", async (ev) => {
     ev.preventDefault();
+    if (!document.getElementById("input-profissional-selecionado").value) {
+      alert("Selecione um profissional cadastrado na lista de resultados.");
+      return;
+    }
     const form = ev.target;
     const dados = Object.fromEntries(new FormData(form).entries());
     dados.prontuario_id = PRONTUARIO_ID;
@@ -23,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
       await apiFetch("/api/pendencias", { method: "POST", body: JSON.stringify(dados) });
       fecharModal("modal-nova-pendencia");
       form.reset();
+      limparBuscaProfissional();
       carregarPendencias();
     } catch (e) {
       alert(e.message);
@@ -42,7 +54,178 @@ document.addEventListener("DOMContentLoaded", () => {
       alert(e.message);
     }
   });
+
+  const btnEnviarAuditoria = document.getElementById("btn-enviar-auditoria");
+  if (btnEnviarAuditoria) {
+    btnEnviarAuditoria.addEventListener("click", async () => {
+      if (!confirm("Confirmar envio deste prontuário para Auditoria?")) return;
+
+      try {
+        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
+          method: "POST",
+          body: JSON.stringify({ destino: "auditoria", observacao: "Enviado para auditoria" }),
+        });
+        window.location.href = "/contas-medicas";
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  }
+
+  const btnProntuarioFaturado = document.getElementById("btn-prontuario-faturado");
+  if (btnProntuarioFaturado) {
+    btnProntuarioFaturado.addEventListener("click", async () => {
+      if (!confirm("Confirmar que este prontuário foi faturado? Isso finaliza o processo.")) return;
+
+      try {
+        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
+          method: "POST",
+          body: JSON.stringify({ destino: "finalizado", observacao: "Prontuário faturado" }),
+        });
+        window.location.href = "/contas-medicas";
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  }
+
+  const btnEnviarFaturamento = document.getElementById("btn-enviar-faturamento");
+  if (btnEnviarFaturamento) {
+    btnEnviarFaturamento.addEventListener("click", async () => {
+      if (!confirm("Confirmar envio deste prontuário de volta para o Faturamento?")) return;
+
+      try {
+        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
+          method: "POST",
+          body: JSON.stringify({ destino: "pronto_faturamento", observacao: "Devolvido pela Auditoria para o Faturamento" }),
+        });
+        window.location.href = "/contas-medicas";
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  }
+
+  document.getElementById("btn-salvar-valores-faturamento").addEventListener("click", async () => {
+    const dados = {
+      dias_enfermaria: document.getElementById("input-dias-enfermaria").value,
+      dias_uti: document.getElementById("input-dias-uti").value,
+      diaria_acompanhante: document.getElementById("input-diaria-acompanhante").value,
+    };
+
+    try {
+      await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/valores-faturamento`, {
+        method: "PUT",
+        body: JSON.stringify(dados),
+      });
+      alert("Valores salvos.");
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  document.getElementById("btn-incluir-procedimento").addEventListener("click", () => {
+    document.getElementById("form-incluir-procedimento").reset();
+    document.getElementById("input-procedimento-id").value = "";
+    document.getElementById("resultados-procedimento").innerHTML = "";
+    procedimentoSelecionadoId = null;
+    abrirModal("modal-incluir-procedimento");
+  });
+
+  let timerBuscaProcedimento;
+  document.getElementById("input-busca-procedimento").addEventListener("input", () => {
+    procedimentoSelecionadoId = null;
+    document.getElementById("input-procedimento-id").value = "";
+    clearTimeout(timerBuscaProcedimento);
+    const valor = document.getElementById("input-busca-procedimento").value.trim();
+    const resultados = document.getElementById("resultados-procedimento");
+    if (!valor) {
+      resultados.innerHTML = "";
+      return;
+    }
+    timerBuscaProcedimento = setTimeout(async () => {
+      try {
+        const lista = await apiFetch(`/api/procedimentos-sigtap?q=${encodeURIComponent(valor)}`);
+        const ativos = lista.filter((p) => p.ativo);
+        if (!ativos.length) {
+          resultados.innerHTML = `<div>Nenhum procedimento encontrado.</div>`;
+          return;
+        }
+        resultados.innerHTML = ativos.map((p) => `
+          <div style="padding:6px 0; cursor:pointer; border-bottom:1px solid var(--cor-borda);"
+               onclick="selecionarProcedimento(${p.id}, ${JSON.stringify(p.codigo)}, ${JSON.stringify(p.descricao)})">
+            <strong>${p.codigo}</strong> · ${p.descricao}
+          </div>
+        `).join("");
+      } catch (e) {
+        resultados.innerHTML = `<div>Erro ao buscar: ${e.message}</div>`;
+      }
+    }, 300);
+  });
+
+  document.getElementById("form-incluir-procedimento").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (!procedimentoSelecionadoId) {
+      alert("Selecione um procedimento na lista de resultados.");
+      return;
+    }
+    try {
+      await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/procedimentos`, {
+        method: "POST",
+        body: JSON.stringify({
+          procedimento_id: procedimentoSelecionadoId,
+          quantidade: document.getElementById("input-quantidade-procedimento").value || 1,
+        }),
+      });
+      fecharModal("modal-incluir-procedimento");
+      carregarProcedimentos();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
 });
+
+function selecionarProcedimento(id, codigo, descricao) {
+  procedimentoSelecionadoId = id;
+  document.getElementById("input-procedimento-id").value = id;
+  document.getElementById("input-busca-procedimento").value = `${codigo} - ${descricao}`;
+  document.getElementById("resultados-procedimento").innerHTML = "";
+}
+
+async function carregarProcedimentos() {
+  const tbody = document.getElementById("tbody-procedimentos-analise");
+  try {
+    const lista = await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/procedimentos`);
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhum procedimento incluído.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = lista.map((p) => `
+      <tr>
+        <td><strong>${p.codigo}</strong></td>
+        <td>${p.descricao}</td>
+        <td>${p.quantidade}</td>
+        <td>${formatarData(p.criado_em)}</td>
+        <td>${p.usuario_nome || "-"}</td>
+        <td class="acoes-linha">
+          <button class="btn btn-perigo btn-sm" onclick="excluirProcedimentoProntuario(${p.id})">Excluir</button>
+        </td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+  }
+}
+
+async function excluirProcedimentoProntuario(itemId) {
+  if (!confirm("Excluir este procedimento do prontuário?")) return;
+  try {
+    await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/procedimentos/${itemId}`, { method: "DELETE" });
+    carregarProcedimentos();
+  } catch (e) {
+    alert(e.message);
+  }
+}
 
 function acoesPendencia(p) {
   if (p.status === "aberta" || p.status === "em_analise") {

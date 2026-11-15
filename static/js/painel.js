@@ -63,7 +63,7 @@ function atualizarDestaque(ultimo) {
 function atualizarLista(lista) {
   const tbody = document.getElementById("tbody-ultimos");
   if (!lista || !lista.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Nenhuma movimentação registrada ainda.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhuma movimentação registrada ainda.</td></tr>`;
     return;
   }
 
@@ -72,6 +72,7 @@ function atualizarLista(lista) {
       <td><strong>${u.numero_prontuario}</strong></td>
       <td>${u.paciente_nome}</td>
       <td>${badgeEvento(u)}</td>
+      <td>${u.dsc_motivo_alta || "-"}</td>
       <td>${formatarData(u.data_hora)}</td>
       <td>${formatarTimerHorasUteis(u.horas_uteis)}</td>
     </tr>

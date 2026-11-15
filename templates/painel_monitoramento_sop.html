@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Monitoramento SOP{% endblock %}
+{% block titulo_pagina %}Monitoramento SOP{% endblock %}
+{% block subtitulo_pagina %}Quantidade de prontuários por status e análises por usuário no SOP{% endblock %}
+
+{% block conteudo %}
+<div class="linha-kpis" id="linha-kpis-status">
+  <div class="kpi-card">
+    <div class="kpi-num">--</div>
+    <div class="kpi-desc">Carregando...</div>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Usuários · SOP</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Usuário</th>
+          <th>Em Análise</th>
+          <th>Analisados</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-usuarios-monitoramento">
+        <tr><td colspan="3" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+  const PAINEL_MONITORAMENTO_URL = "/api/painel-monitoramento-sop";
+</script>
+<script src="{{ url_for('static', filename='js/painel_monitoramento.js') }}"></script>
+{% endblock %}

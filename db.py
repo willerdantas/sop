@@ -20,7 +20,8 @@ from config import SCHEMA_VALIDO
 # configurado em INTEGRA_SCHEMA).
 TABELAS_INTEGRA = (
     "t_clinica", "t_enfermaria", "t_leito", "t_internacao", "t_internacao_leito",
-    "t_paciente", "t_destino", "t_exame", "t_exame_solic",
+    "t_paciente", "t_destino", "t_exame", "t_exame_solic", "t_admissao", "t_cid10",
+    "t_internacao_alta", "t_motivo_alta",
 )
 
 _pool = None

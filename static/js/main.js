@@ -185,6 +185,24 @@ function formatarTimerSOP(horas) {
   return formatarTimer(horas, 48, null);
 }
 
+/**
+ * Etiqueta de dias desde a alta do prontuario:
+ * ate 30d verde/branco, 30-60d amarelo/preto, 60-80d laranja/preto,
+ * 80-90d vermelho/branco, acima de 90d preto/branco.
+ */
+function badgeDiasAlta(dias) {
+  if (dias === null || dias === undefined) return "-";
+
+  let fundo, cor;
+  if (dias <= 30) { fundo = "#2E7D32"; cor = "#fff"; }
+  else if (dias <= 60) { fundo = "#F2C94C"; cor = "#000"; }
+  else if (dias <= 80) { fundo = "#F2994A"; cor = "#000"; }
+  else if (dias <= 90) { fundo = "#D64545"; cor = "#fff"; }
+  else { fundo = "#000"; cor = "#fff"; }
+
+  return `<span class="badge" style="background:${fundo}; color:${cor};">${dias} dia${dias === 1 ? "" : "s"}</span>`;
+}
+
 const STATUS_BADGE_CLASSE = {
   unidade: "badge-unidade",
   sop: "badge-sop",
@@ -222,4 +240,50 @@ function badgeStatusPendencia(status) {
     confirmada: '<span class="badge badge-ok">Confirmada</span>',
   };
   return mapa[status] || status;
+}
+
+/**
+ * Campo de busca de profissional cadastrado (usado no registro de
+ * pendencias no SOP e em Contas Medicas). So aceita um profissional
+ * selecionado na lista de resultados - texto livre nao e submetido.
+ * Espera os elementos #input-busca-profissional, #input-profissional-selecionado
+ * e #resultados-profissional, alem do array global PROFISSIONAIS_CADASTRADOS.
+ */
+function configurarBuscaProfissional() {
+  const inputBusca = document.getElementById("input-busca-profissional");
+  const inputSelecionado = document.getElementById("input-profissional-selecionado");
+  const resultados = document.getElementById("resultados-profissional");
+  if (!inputBusca) return;
+
+  inputBusca.addEventListener("input", () => {
+    inputSelecionado.value = "";
+    const valor = inputBusca.value.trim().toLowerCase();
+    if (!valor) {
+      resultados.innerHTML = "";
+      return;
+    }
+    const encontrados = PROFISSIONAIS_CADASTRADOS.filter((nome) => nome.toLowerCase().includes(valor));
+    if (!encontrados.length) {
+      resultados.innerHTML = `<div>Nenhum profissional encontrado.</div>`;
+      return;
+    }
+    resultados.innerHTML = encontrados.map((nome) => `
+      <div style="padding:6px 0; cursor:pointer; border-bottom:1px solid var(--cor-borda);"
+           onclick="selecionarProfissional(${JSON.stringify(nome)})">${nome}</div>
+    `).join("");
+  });
+}
+
+function selecionarProfissional(nome) {
+  document.getElementById("input-busca-profissional").value = nome;
+  document.getElementById("input-profissional-selecionado").value = nome;
+  document.getElementById("resultados-profissional").innerHTML = "";
+}
+
+function limparBuscaProfissional() {
+  const inputBusca = document.getElementById("input-busca-profissional");
+  if (!inputBusca) return;
+  inputBusca.value = "";
+  document.getElementById("input-profissional-selecionado").value = "";
+  document.getElementById("resultados-profissional").innerHTML = "";
 }

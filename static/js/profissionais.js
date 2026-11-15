@@ -71,6 +71,8 @@ function editarProfissional(profissional) {
   form.querySelector('[name="uf_conselho"]').value = profissional.uf_conselho || "";
   form.querySelector('[name="telefone"]').value = profissional.telefone || "";
   form.querySelector('[name="email"]').value = profissional.email || "";
+  form.querySelector('[name="isn_profissional"]').value = profissional.isn_profissional || "";
+  form.querySelector('[name="cbo"]').value = profissional.cbo || "";
   document.getElementById("titulo-modal-profissional").textContent = "Editar Profissional";
   abrirModal("modal-profissional");
 }

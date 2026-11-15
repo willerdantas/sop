@@ -41,8 +41,24 @@
       <span>{{ prontuario.paciente_nome }}</span>
     </div>
     <div class="info-item">
-      <label>Matrícula</label>
-      <span>{{ prontuario.paciente_matricula or "-" }}</span>
+      <label>Data de Nascimento</label>
+      <span>{{ dat_nascimento.strftime('%d/%m/%Y') if dat_nascimento else "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>Idade</label>
+      <span>{% if idade %}{{ idade.anos }}a {{ idade.meses }}m {{ idade.dias }}d{% else %}-{% endif %}</span>
+    </div>
+    <div class="info-item">
+      <label>Nome da Mãe</label>
+      <span>{{ dsc_mae or "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>CPF</label>
+      <span>{{ num_cpf or "-" }}</span>
+    </div>
+    <div class="info-item">
+      <label>CNS</label>
+      <span>{{ num_cns or "-" }}</span>
     </div>
     <div class="info-item">
       <label>Unidade de Origem</label>
@@ -68,6 +84,32 @@
       <label>Localização Física</label>
       <span>{{ prontuario.localizacao_fisica or "-" }}</span>
     </div>
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>CID</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>CID10</th>
+          <th>Descrição</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in cids %}
+        <tr>
+          <td>{{ "Principal" if c.primario == "S" else "Secundário" }}</td>
+          <td>{{ c.cod_cid10 or "-" }}</td>
+          <td>{{ c.dsc_cid10 or "-" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="vazio-estado">Nenhum CID registrado para esta internação.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -105,26 +147,31 @@
 
 <div class="card-branco">
   <h3>Resumo de Exames</h3>
-  <div class="tabela-wrap">
-    <table class="tabela-padrao">
-      <thead>
-        <tr>
-          <th>Exame</th>
-          <th>Quantidade</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in resumo_exames %}
-        <tr>
-          <td>{{ r.nome }}</td>
-          <td>{{ r.quantidade }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="2" class="vazio-estado">Nenhum exame encontrado para esta internação.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  {% for r in resumo_exames %}
+  <details class="secao-recolhivel" style="margin-bottom:10px;">
+    <summary><strong>{{ r.nome }}</strong> &middot; {{ r.quantidade }} exame(s)</summary>
+    <div class="tabela-wrap" style="margin-top:12px;">
+      <table class="tabela-padrao">
+        <thead>
+          <tr>
+            <th>Exame</th>
+            <th>Quantidade</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ex in r.exames %}
+          <tr>
+            <td>{{ ex.nome }}</td>
+            <td>{{ ex.quantidade }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% else %}
+  <p class="vazio-estado">Nenhum exame encontrado para esta internação.</p>
+  {% endfor %}
 </div>
 
 <div class="card-branco">
@@ -157,6 +204,26 @@
       </table>
     </div>
   </details>
+</div>
+
+<div class="card-branco">
+  <h3>Procedimentos</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Código SIGTAP</th>
+          <th>Descrição</th>
+          <th>Quantidade</th>
+          <th>Incluído em</th>
+          <th>Incluído por</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-procedimentos-analise">
+        <tr><td colspan="5" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <div class="card-branco">
@@ -224,7 +291,9 @@
         </div>
         <div class="campo">
           <label>Profissional *</label>
-          <input type="text" name="profissional" required placeholder="Nome do profissional envolvido" list="lista-profissionais" autocomplete="off">
+          <input type="text" id="input-busca-profissional" placeholder="Digite para buscar o profissional cadastrado" autocomplete="off" required>
+          <input type="hidden" name="profissional" id="input-profissional-selecionado">
+          <div id="resultados-profissional" class="texto-suave" style="margin-top:6px; max-height:160px; overflow-y:auto;"></div>
         </div>
         <div class="campo">
           <label>Data da Ocorrência *</label>
@@ -244,11 +313,6 @@
         <button type="button" class="btn btn-ghost" data-fechar-modal="modal-nova-pendencia">Cancelar</button>
         <button type="submit" class="btn btn-primario">Salvar Pendência</button>
       </div>
-      <datalist id="lista-profissionais">
-        {% for p in profissionais %}
-        <option value="{{ p.nome }}">
-        {% endfor %}
-      </datalist>
     </form>
   </div>
 </div>
@@ -258,6 +322,7 @@
 <script>
   const PRONTUARIO_ID = {{ prontuario.id }};
   const USUARIO_PERFIL = {{ usuario_perfil | tojson }};
+  const PROFISSIONAIS_CADASTRADOS = {{ profissionais | map(attribute='nome') | list | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/analise.js') }}"></script>
 {% endblock %}

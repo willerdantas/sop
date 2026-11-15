@@ -55,12 +55,22 @@
       {% endif %}
       {% if 'pendencias' in paginas_permitidas %}
       <a class="sidebar-item {{ 'ativo' if active_page=='pendencias' }}" href="{{ url_for('pendencias') }}" data-nav>
-        {{ icons.icone('alert') }} <span>Pendências</span>
+        {{ icons.icone('alert') }} <span>Tipos de Pendência</span>
       </a>
       {% endif %}
       {% if 'painel' in paginas_permitidas %}
       <a class="sidebar-item {{ 'ativo' if active_page=='painel' }}" href="{{ url_for('painel') }}" data-nav>
         {{ icons.icone('activity') }} <span>Painel Tempo Real</span>
+      </a>
+      {% endif %}
+      {% if 'painel_monitoramento_sop' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='painel_monitoramento_sop' }}" href="{{ url_for('painel_monitoramento_sop') }}" data-nav>
+        {{ icons.icone('check') }} <span>Monitoramento SOP</span>
+      </a>
+      {% endif %}
+      {% if 'painel_monitoramento_contas_medicas' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='painel_monitoramento_contas_medicas' }}" href="{{ url_for('painel_monitoramento_contas_medicas') }}" data-nav>
+        {{ icons.icone('check') }} <span>Monitoramento Contas Médicas</span>
       </a>
       {% endif %}
       {% if 'clinicas' in paginas_permitidas %}
@@ -71,6 +81,11 @@
       {% if 'profissionais' in paginas_permitidas %}
       <a class="sidebar-item {{ 'ativo' if active_page=='profissionais' }}" href="{{ url_for('profissionais') }}" data-nav>
         {{ icons.icone('id-card') }} <span>Profissionais</span>
+      </a>
+      {% endif %}
+      {% if 'procedimentos' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='procedimentos' }}" href="{{ url_for('procedimentos') }}" data-nav>
+        {{ icons.icone('file-check') }} <span>Procedimentos</span>
       </a>
       {% endif %}
       {% if usuario_perfil == 'admin' %}

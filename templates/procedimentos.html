@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Procedimentos (SIGTAP){% endblock %}
+{% block titulo_pagina %}Procedimentos (SIGTAP){% endblock %}
+{% block subtitulo_pagina %}Catálogo de procedimentos da Tabela SIGTAP{% endblock %}
+
+{% block conteudo %}
+<div class="flex-entre mb-16">
+  <p class="texto-suave">Cadastre os procedimentos SIGTAP que podem ser incluídos em um prontuário.</p>
+  <button class="btn btn-laranja" id="btn-novo-procedimento" type="button">
+    {{ icons.icone('plus') }} Novo Procedimento
+  </button>
+</div>
+
+<div class="painel-filtros">
+  <div class="campo">
+    <label>Buscar</label>
+    <input type="text" id="filtro-busca" placeholder="Buscar por código ou descrição">
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Procedimentos cadastrados</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Código SIGTAP</th>
+          <th>Descrição</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-procedimentos">
+        <tr><td colspan="4" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-fundo" id="modal-procedimento">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-procedimento">{{ icons.icone('x') }}</button>
+    <h3 id="titulo-modal-procedimento">Novo Procedimento</h3>
+    <form id="form-procedimento">
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <div class="campo">
+          <label>Código SIGTAP *</label>
+          <input type="text" name="codigo" required placeholder="Ex: 0301010015">
+        </div>
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Descrição *</label>
+          <input type="text" name="descricao" required placeholder="Descrição do procedimento">
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-procedimento">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/procedimentos.js') }}"></script>
+{% endblock %}

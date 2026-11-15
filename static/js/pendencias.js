@@ -1,63 +1,32 @@
 /**
- * pendencias.js
- * Lista, cadastra e resolve pendencias/inconsistencias vinculadas
- * a um prontuario (por numero, resolvido para o id internamente).
+ * pendencias.js - CRUD simples de tipos de pendencia (catalogo)
  */
-
-let prontuarioEncontradoId = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   carregar();
 
-  document.getElementById("filtro-status").addEventListener("change", carregar);
-  document.getElementById("btn-nova-pendencia").addEventListener("click", () => abrirModal("modal-nova-pendencia"));
-
-  const inputNumero = document.getElementById("input-numero-prontuario");
-  const statusBusca = document.getElementById("status-busca-prontuario");
-  let timerBuscaProntuario;
-
-  inputNumero.addEventListener("input", () => {
-    prontuarioEncontradoId = null;
-    statusBusca.textContent = "";
-    clearTimeout(timerBuscaProntuario);
-    const valor = inputNumero.value.trim();
-    if (!valor) return;
-
-    timerBuscaProntuario = setTimeout(async () => {
-      try {
-        const resultados = await apiFetch(`/api/prontuarios?q=${encodeURIComponent(valor)}`);
-        const exato = resultados.find(p => p.numero_prontuario.toLowerCase() === valor.toLowerCase());
-        if (exato) {
-          prontuarioEncontradoId = exato.id;
-          statusBusca.textContent = `✓ Encontrado: ${exato.paciente_nome} (${statusLabelLocal(exato.status_atual)})`;
-          statusBusca.style.color = "var(--cor-teal-var)";
-        } else {
-          statusBusca.textContent = "Prontuário não encontrado. Verifique o número.";
-          statusBusca.style.color = "var(--cor-laranja)";
-        }
-      } catch (e) {
-        statusBusca.textContent = "Erro ao buscar prontuário.";
-      }
-    }, 400);
+  document.getElementById("btn-novo-tipo-pendencia").addEventListener("click", () => {
+    document.getElementById("form-tipo-pendencia").reset();
+    document.getElementById("form-tipo-pendencia").querySelector('[name="id"]').value = "";
+    document.getElementById("titulo-modal-tipo-pendencia").textContent = "Novo Tipo de Pendência";
+    abrirModal("modal-tipo-pendencia");
   });
 
-  document.getElementById("form-nova-pendencia").addEventListener("submit", async (ev) => {
+  document.getElementById("form-tipo-pendencia").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    if (!prontuarioEncontradoId) {
-      alert("Informe um número de prontuário válido (encontrado na busca) antes de salvar.");
-      return;
-    }
     const form = ev.target;
     const dados = Object.fromEntries(new FormData(form).entries());
-    delete dados.numero_prontuario;
-    dados.prontuario_id = prontuarioEncontradoId;
+    const id = dados.id;
+    delete dados.id;
+    dados.ativo = true;
 
     try {
-      await apiFetch("/api/pendencias", { method: "POST", body: JSON.stringify(dados) });
-      fecharModal("modal-nova-pendencia");
-      form.reset();
-      document.getElementById("status-busca-prontuario").textContent = "";
-      prontuarioEncontradoId = null;
+      if (id) {
+        await apiFetch(`/api/tipos-pendencia/${id}`, { method: "PUT", body: JSON.stringify(dados) });
+      } else {
+        await apiFetch("/api/tipos-pendencia", { method: "POST", body: JSON.stringify(dados) });
+      }
+      fecharModal("modal-tipo-pendencia");
       carregar();
     } catch (e) {
       alert(e.message);
@@ -65,88 +34,57 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-function statusLabelLocal(status) {
-  return STATUS_LABEL_JS[status] || status;
-}
-
 async function carregar() {
-  const status = document.getElementById("filtro-status").value;
-  const params = status ? new URLSearchParams({ status }) : new URLSearchParams();
-  const tbody = document.getElementById("tbody-pendencias");
-
+  const tbody = document.getElementById("tbody-tipos-pendencia");
   try {
-    const lista = await apiFetch(`/api/pendencias?${params.toString()}`);
-    document.getElementById("kpi-total").textContent = lista.length;
-    renderizar(lista);
+    const lista = await apiFetch("/api/tipos-pendencia");
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Nenhum tipo de pendência cadastrado.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = lista.map((t) => `
+      <tr>
+        <td><strong>${t.descricao}</strong></td>
+        <td>${t.setor_responsavel || "-"}</td>
+        <td>${badgeCriticidade(t.criticidade)}</td>
+        <td>${t.ativo ? '<span class="badge badge-ok">Ativo</span>' : '<span class="badge badge-pendencia">Inativo</span>'}</td>
+        <td class="acoes-linha">
+          <button class="btn btn-outline btn-sm" onclick='editarTipoPendencia(${JSON.stringify(t)})'>Editar</button>
+          ${t.ativo
+            ? `<button class="btn btn-perigo btn-sm" onclick="excluirTipoPendencia(${t.id})">Desativar</button>`
+            : `<button class="btn btn-primario btn-sm" onclick="ativarTipoPendencia(${t.id})">Ativar</button>`}
+        </td>
+      </tr>
+    `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="12" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${e.message}</td></tr>`;
   }
 }
 
-function acoesPendencia(p) {
-  if (p.status === "aberta" || p.status === "em_analise") {
-    return `<button class="btn btn-primario btn-sm" onclick="resolverPendencia(${p.id})">Resolver</button>`;
-  }
-  if (p.status === "resolvida") {
-    const info = `<div class="texto-suave" style="margin-bottom:6px;">
-      ${p.usuario_resolucao_nome || "-"} · ${formatarData(p.data_resolucao)}
-    </div>`;
-    return `${info}
-      <button class="btn btn-primario btn-sm" onclick="confirmarPendencia(${p.id})">Confirmar</button>
-      <button class="btn btn-perigo btn-sm" onclick="devolverPendencia(${p.id})">Devolver</button>`;
-  }
-  return `<span class="texto-suave">${p.usuario_resolucao_nome || "-"} · ${formatarData(p.data_resolucao)}</span>`;
+function editarTipoPendencia(tipo) {
+  const form = document.getElementById("form-tipo-pendencia");
+  form.querySelector('[name="id"]').value = tipo.id;
+  form.querySelector('[name="descricao"]').value = tipo.descricao || "";
+  form.querySelector('[name="setor_responsavel"]').value = tipo.setor_responsavel || "";
+  form.querySelector('[name="criticidade"]').value = tipo.criticidade || "media";
+  document.getElementById("titulo-modal-tipo-pendencia").textContent = "Editar Tipo de Pendência";
+  abrirModal("modal-tipo-pendencia");
 }
 
-function renderizar(lista) {
-  const tbody = document.getElementById("tbody-pendencias");
-  if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="12" class="vazio-estado">Nenhuma pendência encontrada.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = lista.map((p) => `
-    <tr>
-      <td><strong>${p.numero_prontuario}</strong></td>
-      <td>${p.paciente_nome}</td>
-      <td>${p.tipo_descricao || "-"}</td>
-      <td>${p.unidade_nome || "-"}</td>
-      <td>${p.profissional || "-"}</td>
-      <td>${formatarDataSimples(p.data_ocorrencia)}</td>
-      <td>${badgeCriticidade(p.criticidade)}</td>
-      <td style="max-width:260px;">${p.descricao}</td>
-      <td>${badgeStatusPendencia(p.status)}</td>
-      <td>${formatarData(p.data_abertura)}</td>
-      <td>${formatarTimerHorasUteis(p.horas_uteis_desde_abertura)}</td>
-      <td class="acoes-linha">${acoesPendencia(p)}</td>
-    </tr>
-  `).join("");
-}
-
-async function resolverPendencia(id) {
-  if (!confirm("Confirmar resolução desta pendência?")) return;
+async function excluirTipoPendencia(id) {
+  if (!confirm("Desativar este tipo de pendência?")) return;
   try {
-    await apiFetch(`/api/pendencias/${id}/resolver`, { method: "POST" });
+    await apiFetch(`/api/tipos-pendencia/${id}`, { method: "DELETE" });
     carregar();
   } catch (e) {
     alert(e.message);
   }
 }
 
-async function confirmarPendencia(id) {
-  if (!confirm("Confirmar e finalizar esta pendência?")) return;
+async function ativarTipoPendencia(id) {
+  if (!confirm("Ativar este tipo de pendência?")) return;
   try {
-    await apiFetch(`/api/pendencias/${id}/confirmar`, { method: "POST" });
-    carregar();
-  } catch (e) {
-    alert(e.message);
-  }
-}
-
-async function devolverPendencia(id) {
-  if (!confirm("Devolver esta pendência para a Unidade resolver novamente?")) return;
-  try {
-    await apiFetch(`/api/pendencias/${id}/devolver`, { method: "POST" });
+    await apiFetch(`/api/tipos-pendencia/${id}/ativar`, { method: "POST" });
     carregar();
   } catch (e) {
     alert(e.message);

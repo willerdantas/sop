@@ -1,14 +1,49 @@
 {% extends "base.html" %}
 {% import "_icons.html" as icons %}
+{% import "_exportar.html" as exportar %}
 {% block titulo %}Contas Médicas{% endblock %}
 {% block titulo_pagina %}Contas Médicas{% endblock %}
 {% block subtitulo_pagina %}Recebimento, conferência, faturamento e auditoria{% endblock %}
 
 {% block conteudo %}
+<div class="painel-filtros">
+  <div class="campo">
+    <label>Nome do Paciente</label>
+    <input type="text" id="filtro-nome" placeholder="Buscar por nome">
+  </div>
+  <div class="campo">
+    <label>Nº Prontuário</label>
+    <input type="text" id="filtro-numero" placeholder="Buscar por número">
+  </div>
+  <div class="campo">
+    <label>Data Início</label>
+    <input type="date" id="filtro-data-inicio">
+  </div>
+  <div class="campo">
+    <label>Data Fim</label>
+    <input type="date" id="filtro-data-fim">
+  </div>
+  <div class="kpi-destaque">
+    <div class="kpi-label">EM CONTAS MÉDICAS AGORA</div>
+    <div class="kpi-valor" id="kpi-total-contas">--</div>
+  </div>
+  <div class="kpi-destaque">
+    <div class="kpi-label">EM FATURAMENTO</div>
+    <div class="kpi-valor" id="kpi-total-faturamento">--</div>
+  </div>
+  <div class="kpi-destaque">
+    <div class="kpi-label">EM AUDITORIA</div>
+    <div class="kpi-valor" id="kpi-total-auditoria">--</div>
+  </div>
+</div>
+
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Prontuários Enviados pelo SOP</h3>
-    <span class="texto-suave" id="contador-aguardando">Carregando...</span>
+    <div class="flex-entre" style="gap:16px;">
+      <span class="texto-suave" id="contador-aguardando">Carregando...</span>
+      {{ exportar.botoes('tbody-aguardando', 'Prontuários Enviados pelo SOP', 'enviados_pelo_sop') }}
+    </div>
   </div>
   <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
     Aguardando confirmação de entrega física do prontuário.
@@ -22,18 +57,22 @@
           <th>Unidade</th>
           <th>Pendências</th>
           <th>Enviado em</th>
+          <th>Dias desde Alta</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody-aguardando">
-        <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
+        <tr><td colspan="7" class="vazio-estado">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
 <div class="card-branco">
-  <h3>Prontuários em Contas Médicas</h3>
+  <div class="flex-entre">
+    <h3>Prontuários em Contas Médicas</h3>
+    {{ exportar.botoes('tbody-contas', 'Prontuários em Contas Médicas', 'prontuarios_em_contas_medicas') }}
+  </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">
       <thead>
@@ -43,18 +82,23 @@
           <th>Unidade</th>
           <th>Pendências</th>
           <th>Recebido em</th>
+          <th>Recebido por</th>
+          <th>Dias desde Alta</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody-contas">
-        <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
+        <tr><td colspan="8" class="vazio-estado">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
 <div class="card-branco">
-  <h3>Prontuários Prontos para Faturamento</h3>
+  <div class="flex-entre">
+    <h3>Prontuários em Faturamento</h3>
+    {{ exportar.botoes('tbody-faturamento', 'Prontuários em Faturamento', 'prontuarios_em_faturamento') }}
+  </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">
       <thead>
@@ -63,18 +107,23 @@
           <th>Paciente</th>
           <th>Unidade</th>
           <th>Atualizado em</th>
+          <th>Enviado por</th>
+          <th>Dias desde Alta</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody-faturamento">
-        <tr><td colspan="5" class="vazio-estado">Carregando...</td></tr>
+        <tr><td colspan="7" class="vazio-estado">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
 <div class="card-branco">
-  <h3>Prontuários em Auditoria</h3>
+  <div class="flex-entre">
+    <h3>Prontuários em Auditoria</h3>
+    {{ exportar.botoes('tbody-auditoria', 'Prontuários em Auditoria', 'prontuarios_em_auditoria') }}
+  </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">
       <thead>
@@ -83,10 +132,36 @@
           <th>Paciente</th>
           <th>Unidade</th>
           <th>Atualizado em</th>
+          <th>Analisado em</th>
+          <th>Analisado por</th>
+          <th>Dias desde Alta</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody-auditoria">
+        <tr><td colspan="8" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Prontuários Faturados</h3>
+    {{ exportar.botoes('tbody-faturados', 'Prontuários Faturados', 'prontuarios_faturados') }}
+  </div>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade</th>
+          <th>Faturado em</th>
+          <th>Faturado por</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-faturados">
         <tr><td colspan="5" class="vazio-estado">Carregando...</td></tr>
       </tbody>
     </table>
@@ -95,5 +170,12 @@
 {% endblock %}
 
 {% block scripts_extra %}
+<script>
+  const USUARIO_PERFIL = {{ usuario_perfil | tojson }};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="{{ url_for('static', filename='js/exportar.js') }}"></script>
 <script src="{{ url_for('static', filename='js/contas_medicas.js') }}"></script>
 {% endblock %}

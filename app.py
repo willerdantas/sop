@@ -14,6 +14,7 @@ Execute com:
     export SECRET_KEY=uma-chave-grande
     flask --app app run --debug
 """
+import calendar
 from datetime import datetime, date, time as dtime, timedelta
 from functools import wraps
 from zoneinfo import ZoneInfo
@@ -210,13 +211,84 @@ def historico_internacao(integra_isn_internacao_leito):
     return isn_internacao, registros
 
 
+def buscar_dados_paciente(isn_internacao):
+    """Dados cadastrais do paciente (nascimento, mae, CPF, CNS) e, se a
+    internacao terminou em obito (isn_destino = 4 em t_internacao_leito),
+    a data dessa alta."""
+    if not isn_internacao:
+        return {"dat_nascimento": None, "dsc_mae": None, "num_cpf": None,
+                "num_cns": None, "data_obito": None}
+
+    paciente = db.query_integra(
+        """SELECT p.dat_nascimento, p.dsc_mae, p.num_cpf, p.num_cns
+           FROM t_internacao i
+           JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
+           WHERE i.isn_internacao = %s""",
+        (isn_internacao,), fetchone=True
+    )
+    dat_nascimento = paciente["dat_nascimento"].date() if paciente and paciente["dat_nascimento"] else None
+
+    obito = db.query_integra(
+        """SELECT dat_alta FROM t_internacao_leito
+           WHERE isn_internacao = %s AND isn_destino = 4
+           ORDER BY dat_alta DESC LIMIT 1""",
+        (isn_internacao,), fetchone=True
+    )
+    data_obito = obito["dat_alta"] if obito else None
+
+    return {
+        "dat_nascimento": dat_nascimento,
+        "dsc_mae": paciente["dsc_mae"] if paciente else None,
+        "num_cpf": paciente["num_cpf"] if paciente else None,
+        "num_cns": paciente["num_cns"] if paciente else None,
+        "data_obito": data_obito,
+    }
+
+
+def listar_cids_internacao(isn_internacao):
+    """Lista de CIDs da internacao (t_admissao join t_cid10), com o
+    principal (primario='S') primeiro."""
+    if not isn_internacao:
+        return []
+    return db.query_integra(
+        """SELECT a.primario, c.cod_cid10, c.dsc_cid10
+           FROM t_admissao a
+           JOIN t_internacao i ON i.isn_internacao = a.isn_internacao
+           LEFT JOIN t_cid10 c ON c.isn_cid10 = a.isn_cid10
+           WHERE a.isn_internacao = %s
+           ORDER BY a.primario DESC""",
+        (isn_internacao,)
+    )
+
+
+def calcular_idade(nascimento, referencia):
+    """Idade entre 'nascimento' e 'referencia' (ambos date) em anos, meses e dias."""
+    if not nascimento or not referencia or referencia < nascimento:
+        return None
+
+    anos = referencia.year - nascimento.year
+    meses = referencia.month - nascimento.month
+    dias = referencia.day - nascimento.day
+
+    if dias < 0:
+        meses -= 1
+        mes_anterior = referencia.month - 1 or 12
+        ano_mes_anterior = referencia.year if referencia.month > 1 else referencia.year - 1
+        dias += calendar.monthrange(ano_mes_anterior, mes_anterior)[1]
+    if meses < 0:
+        anos -= 1
+        meses += 12
+
+    return {"anos": anos, "meses": meses, "dias": dias}
+
+
 def listar_exames_internacao(isn_internacao):
     """Exames solicitados durante a internacao: t_internacao join t_exame_solic
     (por isn_internacao) join t_exame (por isn_exame) para o nome do exame."""
     if not isn_internacao:
         return []
     return db.query_integra(
-        """SELECT ex.dsc_exame,
+        """SELECT es.isn_exame, ex.dsc_exame,
                   es.dat_solicitacao, es.dat_agendamento,
                   es.dat_realizacao, es.dat_cancelamento
            FROM t_internacao i
@@ -228,16 +300,96 @@ def listar_exames_internacao(isn_internacao):
     )
 
 
-def resumir_exames_por_nome(exames):
-    """Agrupa a lista de exames por nome, contando quantos houve de cada um."""
-    contagem = {}
+def resumir_exames_por_classificacao(exames):
+    """Agrupa a lista de exames pela classificacao cadastrada em
+    exame_classificacao (local, por isn_exame). Dentro de cada classificacao,
+    resume por nome de exame, contando quantas vezes cada um aparece no
+    historico (sem trazer datas individuais)."""
+    isn_exames = [int(ex["isn_exame"]) for ex in exames if ex.get("isn_exame") is not None]
+    mapa_classificacao = {}
+    if isn_exames:
+        rows = db.query(
+            "SELECT isn_exame, classificacao FROM exame_classificacao WHERE isn_exame = ANY(%s)",
+            (isn_exames,)
+        )
+        mapa_classificacao = {r["isn_exame"]: r["classificacao"] for r in rows}
+
+    grupos = {}
     for ex in exames:
-        nome = ex["dsc_exame"] or "Sem nome"
-        contagem[nome] = contagem.get(nome, 0) + 1
-    return sorted(
-        [{"nome": nome, "quantidade": qtd} for nome, qtd in contagem.items()],
-        key=lambda r: r["nome"]
+        isn = int(ex["isn_exame"]) if ex.get("isn_exame") is not None else None
+        classificacao = mapa_classificacao.get(isn) or "Sem classificação"
+        nome_exame = ex["dsc_exame"] or "Sem nome"
+        contagem_exames = grupos.setdefault(classificacao, {})
+        contagem_exames[nome_exame] = contagem_exames.get(nome_exame, 0) + 1
+
+    resultado = []
+    for classificacao, contagem_exames in grupos.items():
+        exames_resumidos = sorted(
+            [{"nome": nome, "quantidade": qtd} for nome, qtd in contagem_exames.items()],
+            key=lambda r: r["nome"]
+        )
+        resultado.append({
+            "nome": classificacao,
+            "quantidade": sum(contagem_exames.values()),
+            "exames": exames_resumidos,
+        })
+    return sorted(resultado, key=lambda r: r["nome"])
+
+
+def iniciar_analise(prontuario_id, etapa):
+    """Abre uma sessao de analise (SOP ou Contas Medicas) para o usuario
+    logado, se ainda nao houver uma em aberto para este prontuario/etapa."""
+    aberta = db.query(
+        "SELECT id FROM analises_prontuario WHERE prontuario_id = %s AND etapa = %s AND data_fim IS NULL",
+        (prontuario_id, etapa), fetchone=True
     )
+    if aberta:
+        return
+    db.execute(
+        "INSERT INTO analises_prontuario (prontuario_id, usuario_id, etapa) VALUES (%s,%s,%s)",
+        (prontuario_id, session["usuario_id"], etapa)
+    )
+
+
+def encerrar_analises_abertas(prontuario_id):
+    """Fecha qualquer sessao de analise em aberto deste prontuario - chamado
+    sempre que ele e movido (avanca, e devolvido ou e finalizado)."""
+    db.execute(
+        "UPDATE analises_prontuario SET data_fim = NOW() WHERE prontuario_id = %s AND data_fim IS NULL",
+        (prontuario_id,)
+    )
+
+
+def somar_dias_por_tipo_internacao(historico_leitos):
+    """Soma os dias de internacao (dias_clinica) do historico, separando entre
+    UTI (clinicas com "UTI" no nome) e enfermaria (as demais)."""
+    dias_enfermaria = 0
+    dias_uti = 0
+    for h in historico_leitos:
+        dias = h["dias_clinica"] or 0
+        if h["dsc_clinica"] and "uti" in h["dsc_clinica"].lower():
+            dias_uti += dias
+        else:
+            dias_enfermaria += dias
+    return dias_enfermaria, dias_uti
+
+
+def dentro_do_filtro_prazo(dias, filtro):
+    """Verifica se 'dias' (dias desde a alta) cai na faixa escolhida no filtro
+    de prazo, usando as mesmas faixas da etiqueta colorida (badgeDiasAlta)."""
+    if dias is None:
+        return False
+    if filtro == "30":
+        return dias <= 30
+    if filtro == "60":
+        return 30 < dias <= 60
+    if filtro == "80":
+        return 60 < dias <= 80
+    if filtro == "90":
+        return 80 < dias <= 90
+    if filtro == "90+":
+        return dias > 90
+    return True
 
 
 def listar_altas_pendentes():
@@ -248,7 +400,7 @@ def listar_altas_pendentes():
                SELECT DISTINCT ON (il.isn_internacao)
                       il.isn_internacao_leito, il.isn_internacao, il.isn_clinica,
                       il.dat_internacao, il.dat_alta, il.hor_alta,
-                      il.isn_destino, d.dsc_destino,
+                      il.isn_destino, d.dsc_destino, ma.dsc_motivo_alta,
                       c.dsc_clinica AS unidade_nome,
                       p.num_prontuario, p.dsc_nome AS paciente_nome
                FROM t_internacao_leito il
@@ -256,6 +408,12 @@ def listar_altas_pendentes():
                JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
                LEFT JOIN t_clinica c ON c.isn_clinica = il.isn_clinica
                LEFT JOIN t_destino d ON d.isn_destino = il.isn_destino
+               LEFT JOIN (
+                   SELECT DISTINCT ON (isn_internacao) isn_internacao, cod_tipo_alta
+                   FROM t_internacao_alta
+                   ORDER BY isn_internacao, dat_cadastro DESC
+               ) ia ON ia.isn_internacao = i.isn_internacao
+               LEFT JOIN t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
                WHERE il.isn_destino = ANY(%s) AND il.dat_alta >= %s
                      AND i.isn_tipo_atendimento = 1
                      AND il.isn_clinica = ANY(%s)
@@ -296,9 +454,11 @@ def listar_altas_pendentes():
             "hor_alta": a["hor_alta"],
             "isn_destino": int(a["isn_destino"]) if a["isn_destino"] is not None else None,
             "dsc_destino": a["dsc_destino"],
+            "dsc_motivo_alta": a["dsc_motivo_alta"],
             "num_prontuario": (a["num_prontuario"] or "").strip(),
             "paciente_nome": a["paciente_nome"],
             "horas_uteis_desde_alta": round(horas_uteis, 2),
+            "dias_desde_alta": (agora.date() - a["dat_alta"]).days if a["dat_alta"] else None,
         })
     return pendentes
 
@@ -384,6 +544,9 @@ PAGINAS_SELECIONAVEIS = [
     ("painel", "Painel Tempo Real"),
     ("clinicas", "Clínicas"),
     ("profissionais", "Profissionais"),
+    ("procedimentos", "Procedimentos (SIGTAP)"),
+    ("painel_monitoramento_sop", "Monitoramento SOP"),
+    ("painel_monitoramento_contas_medicas", "Monitoramento Contas Médicas"),
 ]
 
 # Para cada endpoint controlado, quais paginas (qualquer uma delas) dao acesso.
@@ -396,14 +559,20 @@ ENDPOINT_PARA_PAGINAS = {
     "painel": ("painel",),
     "clinicas": ("clinicas",),
     "profissionais": ("profissionais",),
+    "procedimentos": ("procedimentos",),
+    "painel_monitoramento_sop": ("painel_monitoramento_sop",),
+    "painel_monitoramento_contas_medicas": ("painel_monitoramento_contas_medicas",),
     "analise_prontuario": ("sop",),
     "analise_unidade_prontuario": ("unidade",),
     "analise_c_medicas_prontuario": ("contas_medicas",),
     "api_listar_prontuarios": ("sop", "unidade", "contas_medicas"),
     "api_obter_prontuario": ("sop", "unidade", "contas_medicas"),
-    "api_criar_prontuario": ("sop",),
+    "api_buscar_internacoes_prontuario": ("sop",),
+    "api_registrar_internacao": ("sop",),
     "api_mover_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_confirmar_recebimento_prontuario": ("contas_medicas",),
+    "api_editar_valores_faturamento": ("contas_medicas",),
+    "api_registrar_analise_auditoria": ("contas_medicas",),
     "api_confirmar_recebimento_unidade": ("unidade",),
     "api_historico_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_listar_altas": ("sop",),
@@ -414,7 +583,13 @@ ENDPOINT_PARA_PAGINAS = {
     "api_confirmar_pendencia": ("sop", "pendencias", "contas_medicas"),
     "api_devolver_pendencia": ("sop", "pendencias", "contas_medicas"),
     "api_painel": ("painel",),
+    "api_painel_monitoramento_sop": ("painel_monitoramento_sop",),
+    "api_painel_monitoramento_contas_medicas": ("painel_monitoramento_contas_medicas",),
     "api_listar_profissionais": ("profissionais",),
+    "api_listar_procedimentos_sigtap": ("procedimentos", "contas_medicas"),
+    "api_listar_procedimentos_prontuario": ("sop", "unidade", "contas_medicas"),
+    "api_incluir_procedimento_prontuario": ("contas_medicas",),
+    "api_excluir_procedimento_prontuario": ("contas_medicas",),
 }
 
 # Endpoints de referencia (somente leitura, sem dado sensivel por registro)
@@ -541,8 +716,7 @@ def register_routes(app):
     @app.route("/sop")
     @login_required
     def sop():
-        unidades = listar_unidades_integra()
-        return render_template("sop.html", unidades=unidades, active_page="sop")
+        return render_template("sop.html", active_page="sop")
 
     @app.route("/contas-medicas")
     @login_required
@@ -573,6 +747,13 @@ def register_routes(app):
                LIMIT %s OFFSET %s""",
             (list(UNIDADES_PERMITIDAS), POR_PAGINA, (pagina - 1) * POR_PAGINA)
         )
+        tipos_cadastrados = db.query(
+            "SELECT isn_clinica, tipo FROM clinicas_tipo WHERE isn_clinica = ANY(%s)",
+            ([int(u["isn_clinica"]) for u in unidades],)
+        )
+        mapa_tipos = {t["isn_clinica"]: t["tipo"] for t in tipos_cadastrados}
+        for u in unidades:
+            u["tipo"] = mapa_tipos.get(int(u["isn_clinica"]))
         return render_template(
             "clinicas.html", unidades=unidades, active_page="clinicas",
             pagina=pagina, total_paginas=total_paginas, total=total
@@ -587,7 +768,7 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def usuarios():
-        unidades = listar_unidades_integra()
+        unidades = listar_unidades_integra() + listar_unidades_locais_opcoes()
         perfis = db.query("SELECT nome FROM perfis WHERE ativo = TRUE ORDER BY nome")
         return render_template("usuarios.html", unidades=unidades, perfis=perfis, active_page="usuarios")
 
@@ -600,13 +781,7 @@ def register_routes(app):
     @app.route("/pendencias")
     @login_required
     def pendencias():
-        tipos = db.query("SELECT id, descricao, criticidade FROM tipos_pendencia WHERE ativo = TRUE ORDER BY descricao")
-        unidades = listar_unidades_integra() + listar_unidades_locais_opcoes()
-        profissionais = db.query("SELECT nome FROM profissionais WHERE ativo = TRUE ORDER BY nome")
-        return render_template(
-            "pendencias.html", tipos=tipos, unidades=unidades, profissionais=profissionais,
-            active_page="pendencias"
-        )
+        return render_template("pendencias.html", active_page="pendencias")
 
     def montar_contexto_analise(prontuario_id, destino_erro):
         """Monta o contexto compartilhado pelas paginas de analise de
@@ -624,17 +799,14 @@ def register_routes(app):
         anexar_unidade_nome(prontuario)
         isn_internacao, historico_leitos = historico_internacao(prontuario.get("integra_isn_internacao_leito"))
         exames = listar_exames_internacao(isn_internacao)
-        resumo_exames = resumir_exames_por_nome(exames)
+        resumo_exames = resumir_exames_por_classificacao(exames)
 
-        if historico_leitos:
-            unidades_pendencia = []
-            vistas = set()
-            for h in historico_leitos:
-                if h["isn_clinica"] is not None and h["isn_clinica"] not in vistas:
-                    vistas.add(h["isn_clinica"])
-                    unidades_pendencia.append({"id": int(h["isn_clinica"]), "nome": h["dsc_clinica"]})
-        else:
-            unidades_pendencia = listar_unidades_integra()
+        unidades_pendencia = []
+        vistas = set()
+        for h in historico_leitos:
+            if h["isn_clinica"] is not None and h["isn_clinica"] not in vistas:
+                vistas.add(h["isn_clinica"])
+                unidades_pendencia.append({"id": int(h["isn_clinica"]), "nome": h["dsc_clinica"]})
         unidades_pendencia += listar_unidades_locais_opcoes()
 
         min_data_ocorrencia = None
@@ -643,12 +815,22 @@ def register_routes(app):
             min_data_ocorrencia = min(h["dat_internacao"] for h in historico_leitos if h["dat_internacao"])
             max_data_ocorrencia = max((h["dat_alta"] or date.today()) for h in historico_leitos)
 
+        dias_enfermaria_calc, dias_uti_calc = somar_dias_por_tipo_internacao(historico_leitos)
+
+        dados_paciente = buscar_dados_paciente(isn_internacao)
+        idade = calcular_idade(dados_paciente["dat_nascimento"], dados_paciente["data_obito"] or date.today())
+        cids = listar_cids_internacao(isn_internacao)
+
         tipos = db.query("SELECT id, descricao, criticidade FROM tipos_pendencia WHERE ativo = TRUE ORDER BY descricao")
         profissionais = db.query("SELECT nome FROM profissionais WHERE ativo = TRUE ORDER BY nome")
         return dict(
             prontuario=prontuario, tipos=tipos, profissionais=profissionais,
             isn_internacao=isn_internacao, historico_leitos=historico_leitos,
             exames=exames, resumo_exames=resumo_exames,
+            dat_nascimento=dados_paciente["dat_nascimento"], idade=idade,
+            dsc_mae=dados_paciente["dsc_mae"], num_cpf=dados_paciente["num_cpf"],
+            num_cns=dados_paciente["num_cns"], cids=cids,
+            dias_enfermaria_calc=dias_enfermaria_calc, dias_uti_calc=dias_uti_calc,
             unidades_pendencia=unidades_pendencia,
             min_data_ocorrencia=min_data_ocorrencia, max_data_ocorrencia=max_data_ocorrencia,
         )
@@ -659,6 +841,7 @@ def register_routes(app):
         contexto = montar_contexto_analise(prontuario_id, "sop")
         if contexto is None:
             return redirect(url_for("sop"))
+        iniciar_analise(prontuario_id, "sop")
         return render_template("analise.html", active_page="sop", **contexto)
 
     @app.route("/analise_unidade/<int:prontuario_id>")
@@ -675,6 +858,7 @@ def register_routes(app):
         contexto = montar_contexto_analise(prontuario_id, "contas_medicas")
         if contexto is None:
             return redirect(url_for("contas_medicas"))
+        iniciar_analise(prontuario_id, "contas_medicas")
         return render_template("analise_c_medicas.html", active_page="contas_medicas", **contexto)
 
     @app.route("/painel")
@@ -682,10 +866,28 @@ def register_routes(app):
     def painel():
         return render_template("painel.html", active_page="painel")
 
+    @app.route("/painel-monitoramento-sop")
+    @login_required
+    def painel_monitoramento_sop():
+        return render_template("painel_monitoramento_sop.html", active_page="painel_monitoramento_sop")
+
+    @app.route("/painel-monitoramento-contas-medicas")
+    @login_required
+    def painel_monitoramento_contas_medicas():
+        return render_template(
+            "painel_monitoramento_contas_medicas.html",
+            active_page="painel_monitoramento_contas_medicas"
+        )
+
     @app.route("/profissionais")
     @login_required
     def profissionais():
         return render_template("profissionais.html", active_page="profissionais")
+
+    @app.route("/procedimentos")
+    @login_required
+    def procedimentos():
+        return render_template("procedimentos.html", active_page="procedimentos")
 
     # -----------------------------------------------------------
     # API - PRONTUARIOS / FLUXO
@@ -705,7 +907,17 @@ def register_routes(app):
                 (SELECT COUNT(*) FROM pendencias pe
                     WHERE pe.prontuario_id = p.id AND pe.status != 'confirmada') AS pendencias_abertas,
                 (SELECT MAX(m.data_movimentacao) FROM movimentacoes m
-                    WHERE m.prontuario_id = p.id AND m.destino = 'sop') AS entrou_sop_em
+                    WHERE m.prontuario_id = p.id AND m.destino = 'sop') AS entrou_sop_em,
+                (SELECT nome FROM usuarios WHERE id = p.recebido_contas_medicas_usuario_id)
+                    AS recebido_contas_medicas_usuario_nome,
+                (SELECT u.nome FROM movimentacoes m JOIN usuarios u ON u.id = m.usuario_id
+                    WHERE m.prontuario_id = p.id AND m.destino = 'pronto_faturamento'
+                    ORDER BY m.data_movimentacao DESC LIMIT 1) AS faturamento_usuario_nome,
+                (SELECT nome FROM usuarios WHERE id = p.auditoria_analisado_usuario_id)
+                    AS auditoria_analisado_usuario_nome,
+                (SELECT u.nome FROM movimentacoes m JOIN usuarios u ON u.id = m.usuario_id
+                    WHERE m.prontuario_id = p.id AND m.destino = 'finalizado'
+                    ORDER BY m.data_movimentacao DESC LIMIT 1) AS finalizado_usuario_nome
             FROM prontuarios p
             WHERE 1=1
         """
@@ -743,6 +955,13 @@ def register_routes(app):
             else:
                 row["horas_uteis_no_sop"] = None
 
+            if row["status_atual"] == "unidade" and row["recebido_unidade_em"]:
+                row["horas_uteis_na_unidade"] = round(horas_uteis_decorridas(row["recebido_unidade_em"], agora), 2)
+            else:
+                row["horas_uteis_na_unidade"] = None
+
+            row["dias_desde_alta"] = (agora.date() - row["data_alta"]).days if row["data_alta"] else None
+
         return jsonify(rows)
 
     @app.route("/api/prontuarios/<int:prontuario_id>", methods=["GET"])
@@ -762,41 +981,6 @@ def register_routes(app):
             return jsonify({"erro": "sem permissao para ver este prontuario"}), 403
         anexar_unidade_nome(row)
         return jsonify(row)
-
-    @app.route("/api/prontuarios", methods=["POST"])
-    @login_required
-    def api_criar_prontuario():
-        data = request.get_json(force=True)
-        numero = data.get("numero_prontuario", "").strip()
-        paciente = data.get("paciente_nome", "").strip()
-        unidade_id = data.get("unidade_id")
-
-        if not numero or not paciente or not unidade_id:
-            return jsonify({"erro": "numero_prontuario, paciente_nome e unidade_id sao obrigatorios"}), 400
-
-        try:
-            novo = db.execute(
-                """INSERT INTO prontuarios
-                    (numero_prontuario, paciente_nome, paciente_matricula,
-                     unidade_id, data_internacao, data_alta, prioridade,
-                     localizacao_fisica, status_atual, recebido_unidade_em)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'unidade',NOW())
-                   RETURNING *""",
-                (
-                    numero, paciente, data.get("paciente_matricula"),
-                    unidade_id, data.get("data_internacao"), data.get("data_alta"),
-                    data.get("prioridade", "normal"), data.get("localizacao_fisica"),
-                )
-            )
-            db.execute(
-                """INSERT INTO movimentacoes (prontuario_id, origem, destino, usuario_id, observacao)
-                   VALUES (%s, 'cadastro', 'unidade', %s, 'Cadastro inicial do prontuario')""",
-                (novo["id"], session["usuario_id"])
-            )
-            return jsonify(novo), 201
-        except psycopg2.errors.UniqueViolation:
-            db.get_conn().rollback()
-            return jsonify({"erro": "numero de prontuario ja cadastrado"}), 409
 
     @app.route("/api/prontuarios/<int:prontuario_id>/mover", methods=["POST"])
     @login_required
@@ -852,6 +1036,7 @@ def register_routes(app):
                VALUES (%s,%s,%s,%s,%s)""",
             (prontuario_id, atual["status_atual"], destino, session["usuario_id"], observacao)
         )
+        encerrar_analises_abertas(prontuario_id)
         atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
         return jsonify(atualizado)
 
@@ -867,11 +1052,43 @@ def register_routes(app):
             return jsonify({"erro": "entrega deste prontuario ja foi confirmada"}), 409
 
         db.execute(
-            "UPDATE prontuarios SET recebido_contas_medicas_em = NOW() WHERE id = %s",
-            (prontuario_id,)
+            "UPDATE prontuarios SET recebido_contas_medicas_em = NOW(), recebido_contas_medicas_usuario_id = %s WHERE id = %s",
+            (session["usuario_id"], prontuario_id)
         )
         atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
         return jsonify(atualizado)
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/valores-faturamento", methods=["PUT"])
+    @login_required
+    def api_editar_valores_faturamento(prontuario_id):
+        data = request.get_json(force=True)
+
+        def inteiro_ou_none(valor):
+            if valor is None or valor == "":
+                return None
+            return int(valor)
+
+        atualizado = db.execute(
+            """UPDATE prontuarios
+               SET dias_enfermaria=%s, dias_uti=%s, diaria_acompanhante=%s
+               WHERE id=%s RETURNING *""",
+            (inteiro_ou_none(data.get("dias_enfermaria")),
+             inteiro_ou_none(data.get("dias_uti")),
+             inteiro_ou_none(data.get("diaria_acompanhante")),
+             prontuario_id)
+        )
+        if not atualizado:
+            return jsonify({"erro": "prontuario nao encontrado"}), 404
+        return jsonify(atualizado)
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/registrar-analise-auditoria", methods=["POST"])
+    @login_required
+    def api_registrar_analise_auditoria(prontuario_id):
+        db.execute(
+            "UPDATE prontuarios SET auditoria_analisado_em = NOW(), auditoria_analisado_usuario_id = %s WHERE id = %s",
+            (session["usuario_id"], prontuario_id)
+        )
+        return jsonify({"ok": True})
 
     @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento-unidade", methods=["POST"])
     @login_required
@@ -921,9 +1138,18 @@ def register_routes(app):
             pagina = max(1, int(request.args.get("pagina", 1)))
         except ValueError:
             pagina = 1
+        prazo = request.args.get("prazo")
 
         pendentes = listar_altas_pendentes()
+        if prazo:
+            pendentes = [a for a in pendentes if dentro_do_filtro_prazo(a["dias_desde_alta"], prazo)]
         total = len(pendentes)
+
+        # Para exportar o relatorio (PDF/Excel), devolve todos os itens
+        # filtrados de uma vez, sem paginar.
+        if request.args.get("exportar"):
+            return jsonify({"itens": pendentes, "total": total})
+
         total_paginas = max(1, (total + POR_PAGINA - 1) // POR_PAGINA)
         pagina = min(pagina, total_paginas)
         inicio = (pagina - 1) * POR_PAGINA
@@ -948,7 +1174,7 @@ def register_routes(app):
 
         alta = db.query_integra(
             """SELECT il.isn_internacao_leito, il.isn_clinica, il.dat_internacao,
-                      il.dat_alta, d.dsc_destino,
+                      il.dat_alta, d.dsc_destino, ma.dsc_motivo_alta,
                       c.dsc_clinica AS unidade_nome,
                       p.num_prontuario, p.dsc_nome AS paciente_nome
                FROM t_internacao_leito il
@@ -956,6 +1182,12 @@ def register_routes(app):
                JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
                LEFT JOIN t_clinica c ON c.isn_clinica = il.isn_clinica
                LEFT JOIN t_destino d ON d.isn_destino = il.isn_destino
+               LEFT JOIN (
+                   SELECT DISTINCT ON (isn_internacao) isn_internacao, cod_tipo_alta
+                   FROM t_internacao_alta
+                   ORDER BY isn_internacao, dat_cadastro DESC
+               ) ia ON ia.isn_internacao = i.isn_internacao
+               LEFT JOIN t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
                WHERE il.isn_internacao_leito = %s AND i.isn_tipo_atendimento = 1""",
             (isn_internacao_leito,), fetchone=True
         )
@@ -991,6 +1223,106 @@ def register_routes(app):
                    VALUES (%s, 'cadastro', 'sop', %s, %s)""",
                 (novo["id"], session["usuario_id"],
                  f"Alta hospitalar importada do IntegraSH ({alta['dsc_destino'] or 'destino nao informado'})")
+            )
+            return jsonify(novo), 201
+        except psycopg2.errors.UniqueViolation:
+            db.get_conn().rollback()
+            return jsonify({"erro": "numero de prontuario ja cadastrado"}), 409
+
+    @app.route("/api/internacoes/buscar", methods=["GET"])
+    @login_required
+    def api_buscar_internacoes_prontuario():
+        numero = (request.args.get("numero") or "").strip()
+        if not numero:
+            return jsonify({"erro": "informe o numero do prontuario"}), 400
+
+        internacoes = db.query_integra(
+            """SELECT i.isn_internacao, p.num_prontuario, p.dsc_nome AS paciente_nome,
+                      MIN(il.dat_internacao) AS dat_internacao, MAX(il.dat_alta) AS dat_alta,
+                      (ARRAY_AGG(il.isn_internacao_leito ORDER BY il.isn_internacao_leito DESC))[1]
+                          AS isn_internacao_leito,
+                      (ARRAY_AGG(d.dsc_destino ORDER BY il.isn_internacao_leito DESC))[1]
+                          AS dsc_destino,
+                      ma.dsc_motivo_alta
+               FROM t_internacao i
+               JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
+               JOIN t_internacao_leito il ON il.isn_internacao = i.isn_internacao
+               LEFT JOIN t_destino d ON d.isn_destino = il.isn_destino
+               LEFT JOIN (
+                   SELECT DISTINCT ON (isn_internacao) isn_internacao, cod_tipo_alta
+                   FROM t_internacao_alta
+                   ORDER BY isn_internacao, dat_cadastro DESC
+               ) ia ON ia.isn_internacao = i.isn_internacao
+               LEFT JOIN t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
+               WHERE p.num_prontuario = %s AND i.isn_tipo_atendimento = 1
+               GROUP BY i.isn_internacao, p.num_prontuario, p.dsc_nome, ma.dsc_motivo_alta
+               ORDER BY dat_internacao DESC""",
+            (numero,)
+        )
+        if not internacoes:
+            return jsonify([])
+
+        isn_leitos = [int(i["isn_internacao_leito"]) for i in internacoes]
+        registrados = db.query(
+            "SELECT integra_isn_internacao_leito, status_atual FROM prontuarios WHERE integra_isn_internacao_leito = ANY(%s)",
+            (isn_leitos,)
+        )
+        mapa_registrados = {r["integra_isn_internacao_leito"]: r["status_atual"] for r in registrados}
+
+        for i in internacoes:
+            leito = int(i["isn_internacao_leito"])
+            i["status_atual"] = mapa_registrados.get(leito)
+
+        return jsonify(internacoes)
+
+    @app.route("/api/internacoes/<int:isn_internacao_leito>/registrar", methods=["POST"])
+    @login_required
+    def api_registrar_internacao(isn_internacao_leito):
+        ja_existe = db.query(
+            "SELECT id FROM prontuarios WHERE integra_isn_internacao_leito = %s",
+            (isn_internacao_leito,), fetchone=True
+        )
+        if ja_existe:
+            return jsonify({"erro": "esta internacao ja foi registrada no fluxo"}), 409
+
+        internacao = db.query_integra(
+            """SELECT il.isn_internacao_leito, il.isn_clinica, il.dat_internacao, il.dat_alta,
+                      p.num_prontuario, p.dsc_nome AS paciente_nome
+               FROM t_internacao_leito il
+               JOIN t_internacao i ON i.isn_internacao = il.isn_internacao
+               JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
+               WHERE il.isn_internacao_leito = %s AND i.isn_tipo_atendimento = 1""",
+            (isn_internacao_leito,), fetchone=True
+        )
+        if not internacao:
+            return jsonify({"erro": "internacao nao encontrada no sistema hospitalar"}), 404
+
+        numero_prontuario = (internacao["num_prontuario"] or "").strip()
+        if not numero_prontuario:
+            return jsonify({"erro": "esta internacao nao possui numero de prontuario no sistema hospitalar"}), 400
+
+        data = request.get_json(force=True)
+
+        try:
+            novo = db.execute(
+                """INSERT INTO prontuarios
+                    (numero_prontuario, paciente_nome, unidade_id, data_internacao,
+                     data_alta, prioridade, localizacao_fisica, status_atual,
+                     integra_isn_internacao_leito)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,'sop',%s)
+                   RETURNING *""",
+                (
+                    numero_prontuario, internacao["paciente_nome"],
+                    int(internacao["isn_clinica"]) if internacao["isn_clinica"] is not None else None,
+                    internacao["dat_internacao"], internacao["dat_alta"],
+                    data.get("prioridade", "normal"), data.get("localizacao_fisica"),
+                    isn_internacao_leito,
+                )
+            )
+            db.execute(
+                """INSERT INTO movimentacoes (prontuario_id, origem, destino, usuario_id, observacao)
+                   VALUES (%s, 'cadastro', 'sop', %s, 'Registrado manualmente via busca por numero de prontuario')""",
+                (novo["id"], session["usuario_id"])
             )
             return jsonify(novo), 201
         except psycopg2.errors.UniqueViolation:
@@ -1037,7 +1369,10 @@ def register_routes(app):
 
         agora = agora_local()
         for row in rows:
-            row["horas_uteis_desde_abertura"] = round(horas_uteis_decorridas(row["data_abertura"], agora), 2)
+            if row["status"] == "confirmada":
+                row["horas_uteis_desde_abertura"] = None
+            else:
+                row["horas_uteis_desde_abertura"] = round(horas_uteis_decorridas(row["data_abertura"], agora), 2)
 
         return jsonify(rows)
 
@@ -1130,7 +1465,51 @@ def register_routes(app):
     @app.route("/api/tipos-pendencia", methods=["GET"])
     @login_required
     def api_tipos_pendencia():
-        return jsonify(db.query("SELECT * FROM tipos_pendencia WHERE ativo = TRUE ORDER BY descricao"))
+        return jsonify(db.query("SELECT * FROM tipos_pendencia ORDER BY descricao"))
+
+    @app.route("/api/tipos-pendencia", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_criar_tipo_pendencia():
+        data = request.get_json(force=True)
+        descricao = (data.get("descricao") or "").strip()
+        if not descricao:
+            return jsonify({"erro": "descricao e obrigatoria"}), 400
+
+        novo = db.execute(
+            """INSERT INTO tipos_pendencia (descricao, setor_responsavel, criticidade)
+               VALUES (%s,%s,%s) RETURNING *""",
+            (descricao, data.get("setor_responsavel"), data.get("criticidade", "media"))
+        )
+        return jsonify(novo), 201
+
+    @app.route("/api/tipos-pendencia/<int:tipo_id>", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_tipo_pendencia(tipo_id):
+        data = request.get_json(force=True)
+        atualizado = db.execute(
+            """UPDATE tipos_pendencia
+               SET descricao=%s, setor_responsavel=%s, criticidade=%s, ativo=%s
+               WHERE id=%s RETURNING *""",
+            (data.get("descricao"), data.get("setor_responsavel"),
+             data.get("criticidade", "media"), data.get("ativo", True), tipo_id)
+        )
+        return jsonify(atualizado)
+
+    @app.route("/api/tipos-pendencia/<int:tipo_id>", methods=["DELETE"])
+    @login_required
+    @perfil_required("admin")
+    def api_excluir_tipo_pendencia(tipo_id):
+        db.execute("UPDATE tipos_pendencia SET ativo = FALSE WHERE id = %s", (tipo_id,))
+        return jsonify({"ok": True})
+
+    @app.route("/api/tipos-pendencia/<int:tipo_id>/ativar", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_ativar_tipo_pendencia(tipo_id):
+        db.execute("UPDATE tipos_pendencia SET ativo = TRUE WHERE id = %s", (tipo_id,))
+        return jsonify({"ok": True})
 
     # -----------------------------------------------------------
     # API - UNIDADES (consulta ao vivo no sistema hospitalar)
@@ -1170,12 +1549,43 @@ def register_routes(app):
         )
         return jsonify(nova), 201
 
+    @app.route("/api/unidades-locais/<int:unidade_id>", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_unidade_local(unidade_id):
+        data = request.get_json(force=True)
+        nome = (data.get("nome") or "").strip()
+        if not nome:
+            return jsonify({"erro": "nome e obrigatorio"}), 400
+
+        atualizada = db.execute(
+            "UPDATE unidades SET nome=%s, tipo=%s WHERE id=%s RETURNING *",
+            (nome, data.get("tipo"), unidade_id)
+        )
+        return jsonify(atualizada)
+
     @app.route("/api/unidades-locais/<int:unidade_id>", methods=["DELETE"])
     @login_required
     @perfil_required("admin")
     def api_desativar_unidade_local(unidade_id):
         db.execute("UPDATE unidades SET ativo = FALSE WHERE id = %s", (unidade_id,))
         return jsonify({"ok": True})
+
+    @app.route("/api/clinicas/<int:isn_clinica>/tipo", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_tipo_clinica(isn_clinica):
+        data = request.get_json(force=True)
+        tipo = (data.get("tipo") or "").strip() or None
+
+        atualizado = db.execute(
+            """INSERT INTO clinicas_tipo (isn_clinica, tipo, atualizado_em)
+               VALUES (%s, %s, NOW())
+               ON CONFLICT (isn_clinica) DO UPDATE SET tipo = EXCLUDED.tipo, atualizado_em = NOW()
+               RETURNING *""",
+            (isn_clinica, tipo)
+        )
+        return jsonify(atualizado)
 
     # -----------------------------------------------------------
     # API - PROFISSIONAIS (CRUD)
@@ -1198,10 +1608,12 @@ def register_routes(app):
 
         novo = db.execute(
             """INSERT INTO profissionais
-                (nome, categoria, conselho, numero_conselho, uf_conselho, telefone, email)
-               VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
+                (nome, categoria, conselho, numero_conselho, uf_conselho, telefone, email,
+                 isn_profissional, cbo)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
             (nome, categoria, data.get("conselho"), data.get("numero_conselho"),
-             data.get("uf_conselho"), data.get("telefone"), data.get("email"))
+             data.get("uf_conselho"), data.get("telefone"), data.get("email"),
+             data.get("isn_profissional") or None, data.get("cbo"))
         )
         return jsonify(novo), 201
 
@@ -1213,11 +1625,12 @@ def register_routes(app):
         atualizado = db.execute(
             """UPDATE profissionais
                SET nome=%s, categoria=%s, conselho=%s, numero_conselho=%s,
-                   uf_conselho=%s, telefone=%s, email=%s, ativo=%s
+                   uf_conselho=%s, telefone=%s, email=%s, isn_profissional=%s, cbo=%s, ativo=%s
                WHERE id=%s RETURNING *""",
             (data.get("nome"), data.get("categoria"), data.get("conselho"),
              data.get("numero_conselho"), data.get("uf_conselho"), data.get("telefone"),
-             data.get("email"), data.get("ativo", True), profissional_id)
+             data.get("email"), data.get("isn_profissional") or None, data.get("cbo"),
+             data.get("ativo", True), profissional_id)
         )
         return jsonify(atualizado)
 
@@ -1226,6 +1639,112 @@ def register_routes(app):
     @perfil_required("admin")
     def api_excluir_profissional(profissional_id):
         db.execute("UPDATE profissionais SET ativo = FALSE WHERE id = %s", (profissional_id,))
+        return jsonify({"ok": True})
+
+    # -----------------------------------------------------------
+    # API - PROCEDIMENTOS SIGTAP (catalogo, CRUD)
+    # -----------------------------------------------------------
+    @app.route("/api/procedimentos-sigtap", methods=["GET"])
+    @login_required
+    def api_listar_procedimentos_sigtap():
+        busca = (request.args.get("q") or "").strip()
+        sql = "SELECT * FROM procedimentos_sigtap"
+        params = []
+        if busca:
+            sql += " WHERE codigo ILIKE %s OR descricao ILIKE %s"
+            params += [f"%{busca}%", f"%{busca}%"]
+        sql += " ORDER BY codigo"
+        return jsonify(db.query(sql, params))
+
+    @app.route("/api/procedimentos-sigtap", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_criar_procedimento_sigtap():
+        data = request.get_json(force=True)
+        codigo = (data.get("codigo") or "").strip()
+        descricao = (data.get("descricao") or "").strip()
+        if not codigo or not descricao:
+            return jsonify({"erro": "codigo e descricao sao obrigatorios"}), 400
+
+        try:
+            novo = db.execute(
+                "INSERT INTO procedimentos_sigtap (codigo, descricao) VALUES (%s,%s) RETURNING *",
+                (codigo, descricao)
+            )
+            return jsonify(novo), 201
+        except psycopg2.errors.UniqueViolation:
+            db.get_conn().rollback()
+            return jsonify({"erro": "codigo SIGTAP ja cadastrado"}), 409
+
+    @app.route("/api/procedimentos-sigtap/<int:procedimento_id>", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_procedimento_sigtap(procedimento_id):
+        data = request.get_json(force=True)
+        atualizado = db.execute(
+            """UPDATE procedimentos_sigtap SET codigo=%s, descricao=%s, ativo=%s
+               WHERE id=%s RETURNING *""",
+            (data.get("codigo"), data.get("descricao"), data.get("ativo", True), procedimento_id)
+        )
+        return jsonify(atualizado)
+
+    @app.route("/api/procedimentos-sigtap/<int:procedimento_id>", methods=["DELETE"])
+    @login_required
+    @perfil_required("admin")
+    def api_excluir_procedimento_sigtap(procedimento_id):
+        db.execute("UPDATE procedimentos_sigtap SET ativo = FALSE WHERE id = %s", (procedimento_id,))
+        return jsonify({"ok": True})
+
+    @app.route("/api/procedimentos-sigtap/<int:procedimento_id>/ativar", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_ativar_procedimento_sigtap(procedimento_id):
+        db.execute("UPDATE procedimentos_sigtap SET ativo = TRUE WHERE id = %s", (procedimento_id,))
+        return jsonify({"ok": True})
+
+    # -----------------------------------------------------------
+    # API - PROCEDIMENTOS DE UM PRONTUARIO (incluir/excluir em Contas Medicas)
+    # -----------------------------------------------------------
+    @app.route("/api/prontuarios/<int:prontuario_id>/procedimentos", methods=["GET"])
+    @login_required
+    def api_listar_procedimentos_prontuario(prontuario_id):
+        rows = db.query(
+            """SELECT pp.id, pp.quantidade, pp.criado_em,
+                      ps.codigo, ps.descricao,
+                      u.nome AS usuario_nome
+               FROM prontuario_procedimentos pp
+               JOIN procedimentos_sigtap ps ON ps.id = pp.procedimento_id
+               LEFT JOIN usuarios u ON u.id = pp.usuario_id
+               WHERE pp.prontuario_id = %s
+               ORDER BY pp.criado_em DESC""",
+            (prontuario_id,)
+        )
+        return jsonify(rows)
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/procedimentos", methods=["POST"])
+    @login_required
+    def api_incluir_procedimento_prontuario(prontuario_id):
+        data = request.get_json(force=True)
+        procedimento_id = data.get("procedimento_id")
+        if not procedimento_id:
+            return jsonify({"erro": "procedimento_id e obrigatorio"}), 400
+
+        novo = db.execute(
+            """INSERT INTO prontuario_procedimentos (prontuario_id, procedimento_id, quantidade, usuario_id)
+               VALUES (%s,%s,%s,%s) RETURNING id""",
+            (prontuario_id, procedimento_id, data.get("quantidade", 1), session["usuario_id"])
+        )
+        if not novo:
+            return jsonify({"erro": "procedimento nao encontrado"}), 404
+        return jsonify({"ok": True}), 201
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/procedimentos/<int:item_id>", methods=["DELETE"])
+    @login_required
+    def api_excluir_procedimento_prontuario(prontuario_id, item_id):
+        db.execute(
+            "DELETE FROM prontuario_procedimentos WHERE id = %s AND prontuario_id = %s",
+            (item_id, prontuario_id)
+        )
         return jsonify({"ok": True})
 
     # -----------------------------------------------------------
@@ -1239,6 +1758,7 @@ def register_routes(app):
             """SELECT id, nome, login, email, perfil, unidade_id, ativo, criado_em, ultimo_login
                FROM usuarios ORDER BY nome"""
         )
+        anexar_unidade_nome(rows)
         return jsonify(rows)
 
     @app.route("/api/usuarios", methods=["POST"])
@@ -1286,6 +1806,13 @@ def register_routes(app):
     @perfil_required("admin")
     def api_excluir_usuario(usuario_id):
         db.execute("UPDATE usuarios SET ativo = FALSE WHERE id = %s", (usuario_id,))
+        return jsonify({"ok": True})
+
+    @app.route("/api/usuarios/<int:usuario_id>/ativar", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_ativar_usuario(usuario_id):
+        db.execute("UPDATE usuarios SET ativo = TRUE WHERE id = %s", (usuario_id,))
         return jsonify({"ok": True})
 
     # -----------------------------------------------------------
@@ -1427,6 +1954,7 @@ def register_routes(app):
                 "paciente_nome": a["paciente_nome"],
                 "destino": None,
                 "destino_label": f"Alta: {a['dsc_destino'] or '-'}",
+                "dsc_motivo_alta": a["dsc_motivo_alta"],
                 "data_alta": a["dat_alta"],
                 "horas_uteis": a["horas_uteis_desde_alta"],
                 "timestamp": alta_datetime,
@@ -1442,6 +1970,45 @@ def register_routes(app):
             "contadores": contadores,
             "ultimo": ultimos[0] if ultimos else None,
             "ultimos": ultimos,
+        })
+
+    # -----------------------------------------------------------
+    # API - PAINEIS DE MONITORAMENTO (quantidade por status e analises por usuario)
+    # -----------------------------------------------------------
+    def montar_resumo_status_prontuarios():
+        status_rows = db.query("SELECT status_atual, COUNT(*) AS total FROM prontuarios GROUP BY status_atual")
+        status_mapa = {r["status_atual"]: r["total"] for r in status_rows}
+        return [
+            {"status": chave, "label": STATUS_LABEL.get(chave, chave), "total": status_mapa.get(chave, 0)}
+            for chave in FLUXO_ORDEM
+        ]
+
+    def buscar_usuarios_analise(etapa):
+        return db.query("""
+            SELECT u.nome,
+                   COUNT(*) FILTER (WHERE ap.data_fim IS NULL) AS em_analise,
+                   COUNT(*) FILTER (WHERE ap.data_fim IS NOT NULL) AS analisados
+            FROM analises_prontuario ap
+            JOIN usuarios u ON u.id = ap.usuario_id
+            WHERE ap.etapa = %s
+            GROUP BY u.nome
+            ORDER BY u.nome
+        """, (etapa,))
+
+    @app.route("/api/painel-monitoramento-sop", methods=["GET"])
+    @login_required
+    def api_painel_monitoramento_sop():
+        return jsonify({
+            "por_status": montar_resumo_status_prontuarios(),
+            "usuarios": buscar_usuarios_analise("sop"),
+        })
+
+    @app.route("/api/painel-monitoramento-contas-medicas", methods=["GET"])
+    @login_required
+    def api_painel_monitoramento_contas_medicas():
+        return jsonify({
+            "por_status": montar_resumo_status_prontuarios(),
+            "usuarios": buscar_usuarios_analise("contas_medicas"),
         })
 
     # -----------------------------------------------------------

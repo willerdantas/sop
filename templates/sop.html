@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_icons.html" as icons %}
+{% import "_exportar.html" as exportar %}
 {% block titulo %}SOP{% endblock %}
 {% block titulo_pagina %}SOP · Serviço de Organização de Prontuários{% endblock %}
 {% block subtitulo_pagina %}Recebimento, conferência e envio para Contas Médicas{% endblock %}
@@ -26,6 +27,10 @@
     {{ icons.icone('plus') }} Novo Prontuário
   </button>
   <div class="kpi-destaque">
+    <div class="kpi-label">ALTAS AGUARDANDO PRONTUÁRIO</div>
+    <div class="kpi-valor" id="kpi-total-altas">--</div>
+  </div>
+  <div class="kpi-destaque" style="margin-left:0;">
     <div class="kpi-label">NO SOP AGORA</div>
     <div class="kpi-valor" id="kpi-total-sop">--</div>
   </div>
@@ -49,11 +54,28 @@
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Altas</h3>
-    <span class="texto-suave" id="contador-altas">Carregando...</span>
+    <div class="flex-entre" style="gap:16px;">
+      <span class="texto-suave" id="contador-altas">Carregando...</span>
+      <div class="acoes-linha">
+        <button class="btn btn-outline btn-sm" type="button" onclick="exportarAltasPDF()">PDF</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="exportarAltasExcel()">Excel</button>
+      </div>
+    </div>
   </div>
   <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
     Altas recebidas do sistema hospitalar (Residência, Outro hospital ou Óbito) ainda não registradas no fluxo.
   </p>
+  <div class="campo" style="max-width:260px; margin-bottom:16px;">
+    <label>Filtrar por Prazo</label>
+    <select id="filtro-prazo-altas">
+      <option value="">Todos</option>
+      <option value="30">Até 30 dias</option>
+      <option value="60">Até 60 dias</option>
+      <option value="80">Até 80 dias</option>
+      <option value="90">Até 90 dias</option>
+      <option value="90+">Acima de 90 dias</option>
+    </select>
+  </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">
       <thead>
@@ -65,12 +87,14 @@
           <th>Internação</th>
           <th>Alta</th>
           <th>Destino</th>
+          <th>Motivo Alta</th>
           <th>Tempo</th>
+          <th>Dias desde Alta</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody-altas">
-        <tr><td colspan="9" class="vazio-estado">Carregando...</td></tr>
+        <tr><td colspan="11" class="vazio-estado">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
@@ -82,7 +106,10 @@
 </div>
 
 <div class="card-branco">
-  <h3>Prontuários no SOP</h3>
+  <div class="flex-entre">
+    <h3>Prontuários no SOP</h3>
+    {{ exportar.botoes('tbody-sop', 'Prontuários no SOP', 'prontuarios_no_sop') }}
+  </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">
       <thead>
@@ -95,18 +122,22 @@
           <th>Pendências</th>
           <th>Atualizado em</th>
           <th>Tempo no SOP</th>
+          <th>Dias desde Alta</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody-sop">
-        <tr><td colspan="9" class="vazio-estado">Carregando...</td></tr>
+        <tr><td colspan="10" class="vazio-estado">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
 <div class="card-branco">
-  <h3>Prontuários Enviados para Contas Médicas</h3>
+  <div class="flex-entre">
+    <h3>Prontuários Enviados para Contas Médicas</h3>
+    {{ exportar.botoes('tbody-enviados-contas', 'Prontuários Enviados para Contas Médicas', 'enviados_contas_medicas') }}
+  </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">
       <thead>
@@ -125,59 +156,36 @@
   </div>
 </div>
 
-<!-- Modal novo prontuario -->
+<!-- Modal buscar/cadastrar prontuario -->
 <div class="modal-fundo" id="modal-novo-prontuario">
   <div class="modal-caixa">
     <button class="modal-fechar" data-fechar-modal="modal-novo-prontuario">{{ icons.icone('x') }}</button>
     <h3>Cadastrar Prontuário</h3>
-    <form id="form-novo-prontuario">
-      <div class="form-grid">
-        <div class="campo">
-          <label>Número do Prontuário *</label>
-          <input type="text" name="numero_prontuario" required>
-        </div>
-        <div class="campo">
-          <label>Nome do Paciente *</label>
-          <input type="text" name="paciente_nome" required>
-        </div>
-        <div class="campo">
-          <label>Matrícula do Paciente</label>
-          <input type="text" name="paciente_matricula">
-        </div>
-        <div class="campo">
-          <label>Unidade de Origem *</label>
-          <select name="unidade_id" required>
-            <option value="">Selecione</option>
-            {% for u in unidades %}
-            <option value="{{ u.id }}">{{ u.nome }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="campo">
-          <label>Data de Internação</label>
-          <input type="date" name="data_internacao">
-        </div>
-        <div class="campo">
-          <label>Data de Alta</label>
-          <input type="date" name="data_alta">
-        </div>
-        <div class="campo">
-          <label>Prioridade</label>
-          <select name="prioridade">
-            <option value="normal">Normal</option>
-            <option value="urgente">Urgente</option>
-          </select>
-        </div>
-        <div class="campo">
-          <label>Localização Física</label>
-          <input type="text" name="localizacao_fisica" placeholder="Ex: Armário 3, prateleira B">
-        </div>
+    <form id="form-buscar-internacao" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:30px;">
+      <div class="campo" style="flex:1; margin-bottom:0;">
+        <label>Número do Prontuário *</label>
+        <input type="text" id="busca-numero-prontuario" required placeholder="Ex: 624034" autofocus>
       </div>
-      <div class="form-acoes">
-        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-novo-prontuario">Cancelar</button>
-        <button type="submit" class="btn btn-primario">Salvar</button>
-      </div>
+      <button type="submit" class="btn btn-primario btn-sm" style="width:auto;">Buscar</button>
     </form>
+    <div class="tabela-wrap">
+      <table class="tabela-padrao">
+        <thead>
+          <tr>
+            <th>Nº Internação</th>
+            <th>Paciente</th>
+            <th>Data Internação</th>
+            <th>Data Alta</th>
+            <th>Destino</th>
+            <th>Motivo Alta</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-busca-internacoes">
+          <tr><td colspan="7" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 <!-- Modal registrar alta no fluxo -->
@@ -210,6 +218,10 @@
         <label>Destino</label>
         <span id="alta-destino">-</span>
       </div>
+      <div class="info-item">
+        <label>Motivo Alta</label>
+        <span id="alta-motivo">-</span>
+      </div>
     </div>
     <form id="form-registrar-alta">
       <input type="hidden" name="isn_internacao_leito">
@@ -236,5 +248,9 @@
 {% endblock %}
 
 {% block scripts_extra %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="{{ url_for('static', filename='js/exportar.js') }}"></script>
 <script src="{{ url_for('static', filename='js/sop.js') }}"></script>
 {% endblock %}
