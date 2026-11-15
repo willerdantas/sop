@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block titulo %}Configuração do Banco{% endblock %}
+{% block titulo_pagina %}Configuração do Banco{% endblock %}
+{% block subtitulo_pagina %}Conexões com o PostgreSQL e schema dos dados de pacientes{% endblock %}
+
+{% block conteudo %}
+<div class="card-branco">
+  <p class="texto-suave mb-16">
+    As conexões são testadas antes de salvar e gravadas cifradas no <code>.env</code>.
+    A alteração vale na hora, sem reiniciar o sistema. Se o banco principal mudar,
+    será preciso entrar novamente.
+  </p>
+  {% include "_form_banco.html" %}
+</div>
+{% endblock %}

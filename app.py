@@ -29,6 +29,7 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
+import configuracao_inicial
 import db
 from config import Config
 
@@ -53,7 +54,7 @@ STATUS_LABEL = {
 # Altas (sistema hospitalar ISIVITA): isn_destino em t_destino -
 # 1 = Residencia, 3 = Outro hospital, 4 = Obito.
 ALTAS_DESTINOS_VALIDOS = (1, 3, 4)
-ALTAS_DATA_INICIO = "2026-10-01"
+ALTAS_DATA_INICIO = "2026-11-01"
 
 
 FUSO_HORARIO_HOSPITAL = ZoneInfo("America/Fortaleza")
@@ -84,7 +85,7 @@ def horas_uteis_decorridas(inicio, fim):
         dia += timedelta(days=1)
     return total
 
-# Unidades (isn_clinica em integra_local.t_clinica) exibidas na pagina de Unidades.
+# Unidades (isn_clinica em t_clinica) exibidas na pagina de Unidades.
 UNIDADES_PERMITIDAS = (
     15, 17, 18, 20, 21, 22, 23, 24, 34, 35,
     36, 37, 38, 42, 44, 46, 50, 52, 53, 54,
@@ -95,12 +96,12 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    db.init_pool(app)
-    db.init_pool_integra(app)
     db.register_teardown(app)
 
-    with app.app_context():
-        _seed_admin()
+    # Conecta aos bancos. Se nao conseguir, a app sobe em "modo de
+    # configuracao" (/configuracao) em vez de cair. Precisa vir antes de
+    # register_routes para o bloqueio rodar antes do controle por perfil.
+    configuracao_inicial.init_app(app, ao_conectar=_seed_admin)
 
     register_routes(app)
     return app
@@ -126,10 +127,10 @@ def _seed_admin():
 # Integracao com o sistema hospitalar (ISIVITA/SESA) - somente leitura
 # ---------------------------------------------------------------
 def listar_unidades_integra():
-    """Unidades (clinicas) ativas, consultadas ao vivo em integra_local.t_clinica."""
+    """Unidades (clinicas) ativas, consultadas ao vivo em t_clinica."""
     rows = db.query_integra(
         """SELECT isn_clinica, dsc_clinica
-           FROM integra_local.t_clinica
+           FROM t_clinica
            WHERE flg_ativo = 'S'
            ORDER BY dsc_clinica"""
     )
@@ -145,7 +146,7 @@ def listar_unidades_locais_opcoes():
 
 def mapa_nomes_unidades(ids):
     """Recebe uma lista de unidade_id e devolve {id: nome}. IDs positivos sao
-    isn_clinica do sistema hospitalar (integra_local.t_clinica); IDs negativos
+    isn_clinica do sistema hospitalar (t_clinica); IDs negativos
     sao unidades cadastradas localmente (tabela 'unidades', id = -unidade_id)."""
     ids_validos = {int(i) for i in ids if i is not None}
     if not ids_validos:
@@ -157,7 +158,7 @@ def mapa_nomes_unidades(ids):
     mapa = {}
     if ids_integra:
         rows = db.query_integra(
-            "SELECT isn_clinica, dsc_clinica FROM integra_local.t_clinica WHERE isn_clinica = ANY(%s)",
+            "SELECT isn_clinica, dsc_clinica FROM t_clinica WHERE isn_clinica = ANY(%s)",
             (ids_integra,)
         )
         mapa.update({int(r["isn_clinica"]): r["dsc_clinica"] for r in rows})
@@ -186,7 +187,7 @@ def historico_internacao(integra_isn_internacao_leito):
         return None, []
 
     referencia = db.query_integra(
-        "SELECT isn_internacao FROM integra_local.t_internacao_leito WHERE isn_internacao_leito = %s",
+        "SELECT isn_internacao FROM t_internacao_leito WHERE isn_internacao_leito = %s",
         (integra_isn_internacao_leito,), fetchone=True
     )
     if not referencia:
@@ -198,10 +199,10 @@ def historico_internacao(integra_isn_internacao_leito):
                   e.dsc_enfermaria, l.dsc_leito,
                   il.dat_internacao, il.dat_alta,
                   (COALESCE(il.dat_alta, CURRENT_DATE) - il.dat_internacao) AS dias_clinica
-           FROM integra_local.t_internacao_leito il
-           LEFT JOIN integra_local.t_clinica c ON c.isn_clinica = il.isn_clinica
-           LEFT JOIN integra_local.t_enfermaria e ON e.isn_enfermaria = il.isn_enfermaria
-           LEFT JOIN integra_local.t_leito l ON l.isn_leito = il.isn_leito
+           FROM t_internacao_leito il
+           LEFT JOIN t_clinica c ON c.isn_clinica = il.isn_clinica
+           LEFT JOIN t_enfermaria e ON e.isn_enfermaria = il.isn_enfermaria
+           LEFT JOIN t_leito l ON l.isn_leito = il.isn_leito
            WHERE il.isn_internacao = %s
            ORDER BY il.dat_alta ASC, il.isn_internacao_leito ASC""",
         (isn_internacao,)
@@ -218,9 +219,9 @@ def listar_exames_internacao(isn_internacao):
         """SELECT ex.dsc_exame,
                   es.dat_solicitacao, es.dat_agendamento,
                   es.dat_realizacao, es.dat_cancelamento
-           FROM integra_local.t_internacao i
-           JOIN integra_local.t_exame_solic es ON es.isn_internacao = i.isn_internacao
-           LEFT JOIN integra_local.t_exame ex ON ex.isn_exame = es.isn_exame
+           FROM t_internacao i
+           JOIN t_exame_solic es ON es.isn_internacao = i.isn_internacao
+           LEFT JOIN t_exame ex ON ex.isn_exame = es.isn_exame
            WHERE i.isn_internacao = %s
            ORDER BY es.dat_solicitacao DESC""",
         (isn_internacao,)
@@ -250,11 +251,11 @@ def listar_altas_pendentes():
                       il.isn_destino, d.dsc_destino,
                       c.dsc_clinica AS unidade_nome,
                       p.num_prontuario, p.dsc_nome AS paciente_nome
-               FROM integra_local.t_internacao_leito il
-               JOIN integra_local.t_internacao i ON i.isn_internacao = il.isn_internacao
-               JOIN integra_local.t_paciente p ON p.isn_paciente = i.isn_paciente
-               LEFT JOIN integra_local.t_clinica c ON c.isn_clinica = il.isn_clinica
-               LEFT JOIN integra_local.t_destino d ON d.isn_destino = il.isn_destino
+               FROM t_internacao_leito il
+               JOIN t_internacao i ON i.isn_internacao = il.isn_internacao
+               JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
+               LEFT JOIN t_clinica c ON c.isn_clinica = il.isn_clinica
+               LEFT JOIN t_destino d ON d.isn_destino = il.isn_destino
                WHERE il.isn_destino = ANY(%s) AND il.dat_alta >= %s
                      AND i.isn_tipo_atendimento = 1
                      AND il.isn_clinica = ANY(%s)
@@ -558,7 +559,7 @@ def register_routes(app):
             pagina = 1
 
         total = db.query_integra(
-            "SELECT COUNT(*) AS total FROM integra_local.t_clinica WHERE isn_clinica = ANY(%s)",
+            "SELECT COUNT(*) AS total FROM t_clinica WHERE isn_clinica = ANY(%s)",
             (list(UNIDADES_PERMITIDAS),), fetchone=True
         )["total"]
         total_paginas = max(1, (total + POR_PAGINA - 1) // POR_PAGINA)
@@ -566,7 +567,7 @@ def register_routes(app):
 
         unidades = db.query_integra(
             """SELECT isn_clinica, dsc_clinica
-               FROM integra_local.t_clinica
+               FROM t_clinica
                WHERE isn_clinica = ANY(%s)
                ORDER BY isn_clinica ASC
                LIMIT %s OFFSET %s""",
@@ -950,11 +951,11 @@ def register_routes(app):
                       il.dat_alta, d.dsc_destino,
                       c.dsc_clinica AS unidade_nome,
                       p.num_prontuario, p.dsc_nome AS paciente_nome
-               FROM integra_local.t_internacao_leito il
-               JOIN integra_local.t_internacao i ON i.isn_internacao = il.isn_internacao
-               JOIN integra_local.t_paciente p ON p.isn_paciente = i.isn_paciente
-               LEFT JOIN integra_local.t_clinica c ON c.isn_clinica = il.isn_clinica
-               LEFT JOIN integra_local.t_destino d ON d.isn_destino = il.isn_destino
+               FROM t_internacao_leito il
+               JOIN t_internacao i ON i.isn_internacao = il.isn_internacao
+               JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
+               LEFT JOIN t_clinica c ON c.isn_clinica = il.isn_clinica
+               LEFT JOIN t_destino d ON d.isn_destino = il.isn_destino
                WHERE il.isn_internacao_leito = %s AND i.isn_tipo_atendimento = 1""",
             (isn_internacao_leito,), fetchone=True
         )

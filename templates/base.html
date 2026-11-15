@@ -80,6 +80,9 @@
       <a class="sidebar-item {{ 'ativo' if active_page=='perfis' }}" href="{{ url_for('perfis') }}" data-nav>
         {{ icons.icone('check') }} <span>Perfis</span>
       </a>
+      <a class="sidebar-item {{ 'ativo' if active_page=='configuracao_banco' }}" href="{{ url_for('configuracao.banco') }}" data-nav>
+        {{ icons.icone('database') }} <span>Configuração do Banco</span>
+      </a>
       {% endif %}
     </nav>
 

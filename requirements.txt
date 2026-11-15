@@ -4,3 +4,4 @@ Werkzeug==3.0.3
 python-dotenv==1.0.1
 gunicorn==22.0.0
 cryptography==38.0.4
+tzdata==2025.2

@@ -1,0 +1,94 @@
+{# Formulario de configuracao do banco, usado em:
+   - configuracao.html (modo de configuracao, banco indisponivel)
+   - configuracao_banco.html (admin logado, pelo menu lateral)
+   Variaveis: campos, erros, mesmo_servidor, modo_setup #}
+<style>
+  .config-grupos { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 720px) { .config-grupos { grid-template-columns: 1fr; } }
+  .config-grupo { border: 1px solid var(--cor-borda); border-radius: 8px; padding: 14px 16px 6px; margin: 0; min-width: 0; }
+  .config-grupo legend { font-weight: 600; font-size: 14px; color: var(--cor-cinza-escuro); padding: 0 6px; }
+  .config-grupo .dica { font-size: 12px; color: var(--cor-texto-suave); margin: 0 0 10px; }
+  .config-grupo .erro-conexao { font-size: 12px; color: var(--cor-perigo); margin: 0 0 10px; word-break: break-word; }
+  .config-linha { display: grid; grid-template-columns: 1fr 96px; gap: 10px; }
+  .config-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 10px; }
+  .config-rodape { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; }
+  .config-rodape a { font-size: 13px; color: var(--cor-texto-suave); }
+  [hidden] { display: none !important; }
+</style>
+
+<form method="POST" action="{{ url_for('configuracao.banco') }}" data-nav-loading style="width:100%;">
+  <div class="config-grupos">
+    {% for nome, titulo, dica in [
+         ('principal', 'Banco principal (SOP)', 'Banco do próprio sistema de prontuários. Se não existir, é criado com as tabelas.'),
+         ('integra', 'Sistema hospitalar (ISIVITA)', 'Usado somente para leitura de unidades, altas e pacientes.')] %}
+      {% set d = campos[nome] %}
+      <fieldset class="config-grupo" id="grupo-{{ nome }}">
+        <legend>{{ titulo }}</legend>
+        <p class="dica">{{ dica }}</p>
+        {% if erros.get(nome) %}<p class="erro-conexao">{{ erros[nome] }}</p>{% endif %}
+
+        {% if nome == 'integra' %}
+          <label class="config-check">
+            <input type="checkbox" id="integra_mesmo_servidor" name="integra_mesmo_servidor"
+                   value="1" {% if mesmo_servidor %}checked{% endif %}>
+            Mesmo servidor e usuário do banco principal
+          </label>
+        {% endif %}
+
+        <div class="{% if nome == 'integra' %}campos-servidor-integra{% endif %}">
+          <div class="config-linha">
+            <div class="campo">
+              <label for="{{ nome }}_host">Servidor</label>
+              <input type="text" id="{{ nome }}_host" name="{{ nome }}_host"
+                     value="{{ d.host }}" placeholder="localhost">
+            </div>
+            <div class="campo">
+              <label for="{{ nome }}_porta">Porta</label>
+              <input type="text" id="{{ nome }}_porta" name="{{ nome }}_porta"
+                     value="{{ d.porta }}" inputmode="numeric" placeholder="5432">
+            </div>
+          </div>
+          <div class="campo">
+            <label for="{{ nome }}_usuario">Usuário</label>
+            <input type="text" id="{{ nome }}_usuario" name="{{ nome }}_usuario"
+                   value="{{ d.usuario }}" autocomplete="off" placeholder="postgres">
+          </div>
+          <div class="campo">
+            <label for="{{ nome }}_senha">Senha</label>
+            <input type="password" id="{{ nome }}_senha" name="{{ nome }}_senha"
+                   autocomplete="new-password" placeholder="em branco = manter a senha atual">
+          </div>
+        </div>
+        <div class="campo">
+          <label for="{{ nome }}_banco">Banco</label>
+          <input type="text" id="{{ nome }}_banco" name="{{ nome }}_banco"
+                 value="{{ d.banco }}" placeholder="{{ 'sop' if nome == 'principal' else 'isivitaedb_hm' }}">
+        </div>
+        {% if nome == 'integra' %}
+          <div class="campo">
+            <label for="integra_schema">Schema dos dados de pacientes</label>
+            <input type="text" id="integra_schema" name="integra_schema" required
+                   value="{{ d.schema }}" placeholder="integra_local"
+                   pattern="[A-Za-z_][A-Za-z0-9_]*"
+                   title="Letras, números e _ (sem começar por número)">
+          </div>
+        {% endif %}
+      </fieldset>
+    {% endfor %}
+  </div>
+
+  <div class="config-rodape">
+    {% if modo_setup %}<a href="{{ url_for('configuracao.sair') }}">Sair</a>{% else %}<span></span>{% endif %}
+    <button type="submit" class="btn btn-primario" style="width:auto;">Testar conexão e salvar</button>
+  </div>
+</form>
+
+<script>
+  (function () {
+    const check = document.getElementById("integra_mesmo_servidor");
+    const bloco = document.querySelector(".campos-servidor-integra");
+    function atualizar() { bloco.hidden = check.checked; }
+    check.addEventListener("change", atualizar);
+    atualizar();
+  })();
+</script>

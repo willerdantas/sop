@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuração · Sistema de Prontuários HM</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  .login-card.config-banco { max-width: 760px; }
+  .config-aviso {
+    width: 100%; font-size: 13px; line-height: 1.45; margin-bottom: 14px;
+    padding: 10px 12px; border-radius: 8px;
+    background: #FFF4E5; border: 1px solid var(--cor-alerta); color: var(--cor-cinza-escuro);
+  }
+  .config-aviso code { word-break: break-word; }
+  .mensagem-flash.sucesso { background: #E6F5F3; border-color: var(--cor-sucesso); color: var(--cor-teal-escuro); }
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="loading-logo-wrap">
+    <span class="loading-ring"></span>
+    <img class="loading-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}" alt="Carregando">
+  </div>
+  <p class="loading-texto">Carregando...</p>
+</div>
+
+<div class="pagina-login">
+  <div class="login-card {% if etapa == 'banco' %}config-banco{% endif %}">
+    <img class="login-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}"
+         alt="Logo Hospital Municipal">
+
+    {% if etapa == 'criar_senha' %}
+      <h1>Configuração inicial</h1>
+      <p class="login-subtitulo">Perfil <strong>administrador</strong> aberto sem senha</p>
+    {% elif etapa == 'entrar' %}
+      <h1>Configuração do sistema</h1>
+      <p class="login-subtitulo">Entre com a senha do administrador de configuração</p>
+    {% else %}
+      <h1>Configuração do banco de dados</h1>
+      <p class="login-subtitulo">Informe as conexões com o PostgreSQL</p>
+    {% endif %}
+
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% for categoria, msg in mensagens %}
+        <div class="mensagem-flash {{ categoria }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {% if etapa == 'criar_senha' %}
+      <div class="config-aviso">
+        O banco de dados ainda não está configurado ou não está acessível.
+        Para continuar, crie uma senha para o administrador de configuração.
+        Ela será pedida sempre que for preciso reconfigurar o banco.
+      </div>
+      <form method="POST" action="{{ url_for('configuracao.criar_senha') }}" data-nav-loading style="width:100%;">
+        <div class="campo">
+          <label for="senha">Nova senha</label>
+          <input type="password" id="senha" name="senha" required autofocus
+                 minlength="{{ senha_minima }}" autocomplete="new-password"
+                 placeholder="mínimo {{ senha_minima }} caracteres">
+        </div>
+        <div class="campo">
+          <label for="confirmacao">Confirme a senha</label>
+          <input type="password" id="confirmacao" name="confirmacao" required
+                 minlength="{{ senha_minima }}" autocomplete="new-password" placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primario">Criar senha e continuar</button>
+      </form>
+
+    {% elif etapa == 'entrar' %}
+      <div class="config-aviso">
+        O banco de dados não está acessível. O sistema está em modo de configuração.
+      </div>
+      <form method="POST" action="{{ url_for('configuracao.entrar') }}" data-nav-loading style="width:100%;">
+        <div class="campo">
+          <label for="login">Usuário</label>
+          <input type="text" id="login" value="admin" disabled>
+        </div>
+        <div class="campo">
+          <label for="senha">Senha</label>
+          <input type="password" id="senha" name="senha" required autofocus
+                 autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primario">Entrar</button>
+      </form>
+
+    {% else %}
+      {% if erro_inicial and not erros %}
+        <div class="config-aviso">
+          <strong>Não foi possível conectar com a configuração atual:</strong><br>
+          <code>{{ erro_inicial }}</code>
+        </div>
+      {% endif %}
+
+      {% include "_form_banco.html" %}
+    {% endif %}
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

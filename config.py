@@ -1,6 +1,31 @@
 import os
+import re
 
 from crypto_utils import decifrar
+
+DATABASE_URL_PADRAO = "postgresql://postgres:postgres@localhost:5432/sop"
+INTEGRA_DATABASE_URL_PADRAO = "postgresql://postgres:postgres@localhost:5432/isivitaedb_hm"
+
+
+INTEGRA_SCHEMA_PADRAO = "integra_local"
+
+# Nome de schema aceito: letras, numeros e "_", sem comecar por numero.
+SCHEMA_VALIDO = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def ler_integra_schema():
+    """Schema do banco do sistema hospitalar (ISIVITA) onde ficam as tabelas
+    com as informacoes dos pacientes (t_paciente, t_internacao, ...)."""
+    return os.environ.get("INTEGRA_SCHEMA", "").strip() or INTEGRA_SCHEMA_PADRAO
+
+
+def ler_urls_banco():
+    """(DATABASE_URL, INTEGRA_DATABASE_URL) ja decifradas, lidas do ambiente
+    no momento da chamada (o modo de configuracao pode altera-las em execucao)."""
+    return (
+        decifrar(os.environ.get("DATABASE_URL", DATABASE_URL_PADRAO)),
+        decifrar(os.environ.get("INTEGRA_DATABASE_URL", INTEGRA_DATABASE_URL_PADRAO)),
+    )
 
 
 class Config:
@@ -23,17 +48,11 @@ class Config:
 
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-trocar-em-producao")
 
-    DATABASE_URL = decifrar(os.environ.get(
-        "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/sop",
-    ))
-
-    # Banco do sistema hospitalar (ISIVITA/SESA) - somente leitura.
-    # Usado para consultar unidades (t_clinica) e altas (t_internacao_leito).
-    INTEGRA_DATABASE_URL = decifrar(os.environ.get(
-        "INTEGRA_DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/isivitaedb_hm",
-    ))
+    # INTEGRA_DATABASE_URL: banco do sistema hospitalar (ISIVITA/SESA) -
+    # somente leitura. Usado para consultar unidades (t_clinica) e altas
+    # (t_internacao_leito). Valores lidos na inicializacao; os pools usam
+    # ler_urls_banco(), que reflete alteracoes feitas pelo modo de configuracao.
+    DATABASE_URL, INTEGRA_DATABASE_URL = ler_urls_banco()
 
     # Usuario administrador criado automaticamente no primeiro start,
     # caso a tabela usuarios esteja vazia.
