@@ -51,6 +51,12 @@
       </div>
       <button type="submit" class="btn btn-primario">Entrar</button>
     </form>
+
+    {% if url_homologacao %}
+    <p class="login-subtitulo" style="margin-top:16px;">
+      <a href="{{ url_homologacao }}">Ir para o ambiente de homologação / treinamento</a>
+    </p>
+    {% endif %}
   </div>
 </div>
 

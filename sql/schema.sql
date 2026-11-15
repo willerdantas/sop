@@ -82,10 +82,29 @@ CREATE TABLE IF NOT EXISTS usuarios (
     unidade_id      INTEGER,                -- isn_clinica (integrasesa.t_clinica), sem FK local
     ativo           BOOLEAN NOT NULL DEFAULT TRUE,
     criado_em       TIMESTAMP NOT NULL DEFAULT NOW(),
-    ultimo_login    TIMESTAMP
+    ultimo_login    TIMESTAMP,
+    tela_inicial    VARCHAR(50)             -- chave de PAGINAS_SELECIONAVEIS; NULL = escolhe automaticamente
 );
 
 ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_unidade_id_fkey;
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS tela_inicial VARCHAR(50);
+
+-- ---------------------------------------------------------
+-- USUARIO x UNIDADES (um usuario pode estar vinculado a mais de uma
+-- unidade; a tela "Unidade" mostra prontuarios/pendencias de todas as
+-- unidades vinculadas). unidade_id segue o mesmo esquema de sinal usado
+-- em prontuarios/pendencias (positivo = isn_clinica do sistema
+-- hospitalar, negativo = id da tabela local "unidades"). Substitui o uso
+-- do antigo usuarios.unidade_id (mantido na tabela so por compatibilidade,
+-- nao e mais lido/gravado pela aplicacao).
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS usuario_unidades (
+    usuario_id      INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    unidade_id      INTEGER NOT NULL,
+    PRIMARY KEY (usuario_id, unidade_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_usuario_unidades_unidade ON usuario_unidades(unidade_id);
 
 -- ---------------------------------------------------------
 -- TIPOS DE PENDENCIA (catalogo de inconsistencias possiveis)

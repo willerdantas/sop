@@ -8,17 +8,15 @@
 # via INTEGRA_DATABASE_URL, somente leitura) ja existem no Postgres do
 # host e nao devem ser recriados/dockerizados.
 #
-# Dentro do container, "localhost" aponta para o proprio container, nao
-# para o host onde o Postgres roda - por isso DATABASE_URL e
-# INTEGRA_DATABASE_URL sao sobrescritas abaixo (em "environment") com
-# versoes cifradas que usam "host.docker.internal" em vez de "localhost".
-# O .env continua com "localhost", intacto, para quem roda a app direto
-# no host (fora do Docker). Pra gerar esses valores cifrados de novo
-# (ex: apos trocar a senha do banco):
-#   python3 crypto_utils.py cifrar "postgresql://usuario:senha@host.docker.internal:5432/sop"
+# Toda a conexao com o banco (DATABASE_URL, INTEGRA_DATABASE_URL,
+# INTEGRA_SCHEMA) fica so nos arquivos .env / .env.homolog - nunca aqui.
+# Isso permite trocar de servidor de banco (ex: apontar para uma maquina
+# nova) so editando esses arquivos ou pela tela "Configuração do Banco"
+# dentro da aplicacao, sem precisar editar nem reconstruir os containers.
 #
-# O mapeamento extra_hosts faz "host.docker.internal" funcionar tambem no
-# Linux (no Docker Desktop/Mac/Windows ja funciona nativo).
+# O mapeamento extra_hosts faz "host.docker.internal" (usado dentro dos
+# .env quando o Postgres roda no mesmo host dos containers) funcionar
+# tambem no Linux (no Docker Desktop/Mac/Windows ja funciona nativo).
 
 services:
   web:
@@ -29,9 +27,6 @@ services:
       - .:/app
     env_file:
       - .env
-    environment:
-      DATABASE_URL: gAAAAABqwszpb-K-eSKaTloFvIN115W76iwJ0GGI4jfrBFsEMtj2PNyJHtTaHOhe7ReQVDwP8DLi5zyUQiwXCPDyv0vc4G47evORSp28j9CDx3v8kwE41NXQNfzXDYVMpBHt5iYgu0KwSYetS3Rfoltsy7y2y5NJQiUbmqwJaqrUS2FOEyGrLFU=
-      INTEGRA_DATABASE_URL: gAAAAABqwszprl7wMAPRzBH8vR30PfeZn5GFRN3acHpfREpiOOnarNu8Rezf7xnXqm88Beqw4j0CmJiPeSEyQz_fzogyuY_feE6z7A3TDxIAYv5SA9duyuTpKbDh9Bo9S8EkESx3GMGYDxx2OvQ02b311ObXk-h4B6SIp5A0xiOXh9kpEN5d8mE=
     ports:
       - "5500:5500"
     command: >
@@ -41,16 +36,19 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
-  # Ambiente de homologacao/treinamento: mesma aplicacao, banco local
-  # separado ("sop_homol", mesmo servidor/credenciais do banco principal,
-  # so o nome do banco muda) para nao misturar dados de treino com os
-  # reais. O banco do sistema hospitalar (INTEGRA_DATABASE_URL) e o MESMO
-  # de producao (somente leitura, dados reais para praticar).
+  # Ambiente de homologacao/treinamento: mesma aplicacao, banco separado
+  # ("sop_homol", mesmo servidor do banco principal, so o nome do banco
+  # muda) para nao misturar dados de treino com os reais. O banco do
+  # sistema hospitalar (INTEGRA_DATABASE_URL) e o MESMO de producao
+  # (somente leitura, dados reais para praticar).
+  #
+  # Usa um arquivo de configuracao proprio (.env.homolog) em vez do .env
+  # de producao, justamente para poder apontar para um banco/servidor
+  # diferente sem qualquer valor cravado neste docker-compose.yml.
   #
   # "sop_homol" e criado automaticamente (banco + tabelas) no primeiro
   # start, pelo bootstrap do proprio app (db.preparar_banco) - nao precisa
-  # criar a mao. SECRET_KEY e diferente da producao de proposito, para as
-  # sessoes de um ambiente nao valerem no outro.
+  # criar a mao.
   web_homolog:
     image: python:3.11-slim
     container_name: prontuarios_hm_homolog
@@ -58,12 +56,7 @@ services:
     volumes:
       - .:/app
     env_file:
-      - .env
-    environment:
-      AMBIENTE: "homolog"
-      SECRET_KEY: "7d15ef264b9b5e760651dcb9af617082fafa75c65395cfdb3bb481ebc7d350e1"
-      DATABASE_URL: gAAAAABq-fYZ6RZ3THTsi16DxvUdcAuyEboz6R0qFYo_WVOWLoP1TYAYx3whIvoNmmslWCas2yPEXR3lK6_dlwYlynNP9ileessEqGbIpCM_ZNDxVUk7P6fy4QDRvqaup4V0LNi0nEl7u6Nw8Jwl6Kc3JdnWyQBsng==
-      INTEGRA_DATABASE_URL: gAAAAABq-fYZBGee6soQQpgs6cpvAnuda1f7Nchht7GUqdVneFIjbO1p_HDrMhAzeScqvsNAW0QiVTNsNqfGpmmNAVCu7ZMLE2XzTQBeq9lyx96ZG_IYhrqfsJOGbJV6vgTRZ40OcH4fAmrZK2eECCvwfYGK48Y04Q==
+      - .env.homolog
     ports:
       - "5501:5501"
     command: >

@@ -31,7 +31,10 @@ from config import SCHEMA_VALIDO, ler_integra_schema, ler_urls_banco
 from crypto_utils import cifrar
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(BASE_DIR, ".env")
+# Mesmo arquivo que app.py escolhe no load_dotenv: cada ambiente grava na
+# sua propria configuracao, nunca na do outro.
+_ARQUIVO_ENV = ".env.homolog" if os.environ.get("AMBIENTE", "").strip().lower() == "homolog" else ".env"
+ENV_PATH = os.path.join(BASE_DIR, _ARQUIVO_ENV)
 SCHEMA_PATH = os.path.join(BASE_DIR, "sql", "schema.sql")
 CHAVE_HASH_SENHA = "SETUP_ADMIN_SENHA_HASH"
 CHAVES_MONITORADAS = (

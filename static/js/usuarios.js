@@ -23,8 +23,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const dados = Object.fromEntries(new FormData(form).entries());
     const id = dados.id;
     delete dados.id;
+    delete dados.unidade_ids;
     dados.ativo = true;
-    if (!dados.unidade_id) dados.unidade_id = null;
+    dados.unidade_ids = Array.from(form.querySelectorAll('input[name="unidade_ids"]:checked')).map((el) => Number(el.value));
+    if (!dados.tela_inicial) dados.tela_inicial = null;
     if (id && !dados.senha) delete dados.senha;
 
     try {
@@ -86,7 +88,11 @@ function editarUsuario(usuario) {
   form.querySelector('[name="login"]').value = usuario.login || "";
   form.querySelector('[name="email"]').value = usuario.email || "";
   form.querySelector('[name="perfil"]').value = usuario.perfil || "operador";
-  form.querySelector('[name="unidade_id"]').value = usuario.unidade_id || "";
+  form.querySelector('[name="tela_inicial"]').value = usuario.tela_inicial || "";
+  const unidadeIds = (usuario.unidade_ids || []).map(String);
+  form.querySelectorAll('input[name="unidade_ids"]').forEach((el) => {
+    el.checked = unidadeIds.includes(el.value);
+  });
 
   document.getElementById("input-senha-usuario").value = "";
   document.getElementById("input-senha-usuario").required = false;

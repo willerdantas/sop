@@ -22,7 +22,12 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Cada ambiente tem seu proprio arquivo de configuracao (DATABASE_URL,
+# INTEGRA_DATABASE_URL, etc.) para nao misturar producao e homologacao.
+# AMBIENTE=homolog ja vem definido como variavel de ambiente real (pelo
+# docker-compose, via env_file) antes deste load_dotenv rodar.
+ARQUIVO_ENV = ".env.homolog" if os.environ.get("AMBIENTE", "").strip().lower() == "homolog" else ".env"
+load_dotenv(ARQUIVO_ENV)
 
 import psycopg2
 from flask import (
@@ -180,6 +185,23 @@ def anexar_unidade_nome(linhas, campo_id="unidade_id"):
         if item:
             item["unidade_nome"] = mapa.get(item.get(campo_id))
     return linhas
+
+
+def unidades_do_usuario(usuario_id):
+    """Lista (ints) das unidades vinculadas a um usuario (tabela usuario_unidades)."""
+    rows = db.query("SELECT unidade_id FROM usuario_unidades WHERE usuario_id = %s", (usuario_id,))
+    return [r["unidade_id"] for r in rows]
+
+
+def salvar_unidades_usuario(usuario_id, unidade_ids):
+    """Substitui as unidades vinculadas a um usuario pela lista recebida."""
+    db.execute("DELETE FROM usuario_unidades WHERE usuario_id = %s", (usuario_id,))
+    ids_validos = sorted({int(i) for i in (unidade_ids or []) if str(i).strip() != ""})
+    for uid in ids_validos:
+        db.execute(
+            "INSERT INTO usuario_unidades (usuario_id, unidade_id) VALUES (%s, %s)",
+            (usuario_id, uid)
+        )
 
 
 def historico_internacao(integra_isn_internacao_leito):
@@ -612,22 +634,41 @@ def paginas_do_perfil(nome_perfil):
     return [r["pagina"] for r in rows]
 
 
-def primeira_pagina_permitida():
-    """Primeira pagina (na ordem de PAGINAS_SELECIONAVEIS) que o usuario logado
-    pode acessar, usada como destino seguro apos login ou em bloqueios."""
-    paginas_do_usuario = session.get("paginas_permitidas") or []
+def primeira_pagina_permitida(paginas_do_usuario=None):
+    """Primeira pagina (na ordem de PAGINAS_SELECIONAVEIS) presente em
+    'paginas_do_usuario' (por padrao, as paginas do usuario logado), usada como
+    destino seguro apos login ou em bloqueios."""
+    if paginas_do_usuario is None:
+        paginas_do_usuario = session.get("paginas_permitidas") or []
     for chave, _ in PAGINAS_SELECIONAVEIS:
         if chave in paginas_do_usuario:
             return chave
     return None
 
 
+def _url_homologacao():
+    """Link para a tela de login do ambiente de homologacao (porta 5501),
+    mesmo host do ambiente de producao (porta 5500). None fora desse caso
+    (ex: acessando ja pela homologacao, ou porta diferente de 5500)."""
+    host = request.host
+    if ":" not in host:
+        return None
+    hostname, porta = host.rsplit(":", 1)
+    if porta != "5500":
+        return None
+    return f"//{hostname}:5501/login"
+
+
 def prontuario_da_unidade_do_usuario(prontuario_row):
-    """True se o perfil nao for operador, ou se o prontuario pertencer a
-    unidade a qual o operador esta atrelado."""
-    if session.get("perfil") != "operador":
+    """True se o usuario for admin, se nao tiver nenhuma unidade vinculada
+    (sem restricao), ou se o prontuario pertencer a uma das unidades
+    vinculadas ao usuario logado."""
+    if session.get("perfil") == "admin":
         return True
-    return bool(prontuario_row) and prontuario_row.get("unidade_id") == session.get("unidade_id")
+    unidade_ids = session.get("unidade_ids") or []
+    if not unidade_ids:
+        return True
+    return bool(prontuario_row) and prontuario_row.get("unidade_id") in unidade_ids
 
 
 def register_routes(app):
@@ -682,7 +723,7 @@ def register_routes(app):
                 session["usuario_id"] = usuario["id"]
                 session["nome"] = usuario["nome"]
                 session["perfil"] = usuario["perfil"]
-                session["unidade_id"] = usuario["unidade_id"]
+                session["unidade_ids"] = unidades_do_usuario(usuario["id"])
                 session["paginas_permitidas"] = (
                     [] if usuario["perfil"] == "admin" else paginas_do_perfil(usuario["perfil"])
                 )
@@ -691,9 +732,13 @@ def register_routes(app):
                     (usuario["id"],)
                 )
                 if usuario["perfil"] == "admin":
-                    destino_padrao = url_for("dashboard")
+                    paginas_do_usuario = [chave for chave, _ in PAGINAS_SELECIONAVEIS]
                 else:
-                    destino_padrao = url_for(primeira_pagina_permitida() or "dashboard")
+                    paginas_do_usuario = session["paginas_permitidas"]
+                tela_inicial = usuario.get("tela_inicial") or "dashboard"
+                if tela_inicial not in paginas_do_usuario:
+                    tela_inicial = primeira_pagina_permitida(paginas_do_usuario)
+                destino_padrao = url_for(tela_inicial or "dashboard")
                 destino = request.args.get("next") or destino_padrao
                 return redirect(destino)
 
@@ -771,7 +816,8 @@ def register_routes(app):
     def usuarios():
         unidades = listar_unidades_integra() + listar_unidades_locais_opcoes()
         perfis = db.query("SELECT nome FROM perfis WHERE ativo = TRUE ORDER BY nome")
-        return render_template("usuarios.html", unidades=unidades, perfis=perfis, active_page="usuarios")
+        return render_template("usuarios.html", unidades=unidades, perfis=perfis,
+                               paginas_disponiveis=PAGINAS_SELECIONAVEIS, active_page="usuarios")
 
     @app.route("/perfis")
     @login_required
@@ -941,9 +987,9 @@ def register_routes(app):
         if data_fim:
             sql += " AND p.data_internacao <= %s"
             params.append(data_fim)
-        if session.get("perfil") == "operador":
-            sql += " AND p.unidade_id = %s"
-            params.append(session.get("unidade_id"))
+        if session.get("perfil") != "admin" and session.get("unidade_ids"):
+            sql += " AND p.unidade_id = ANY(%s)"
+            params.append(session.get("unidade_ids"))
         sql += " ORDER BY p.atualizado_em DESC LIMIT 300"
 
         rows = db.query(sql, params)
@@ -1357,13 +1403,13 @@ def register_routes(app):
             sql += " AND pe.prontuario_id = %s"
             params.append(prontuario_id)
         if minha_unidade:
-            # Pendencias cuja "Unidade da Ocorrencia" e a unidade do usuario logado,
-            # independente de onde o prontuario esteja agora no fluxo.
-            sql += " AND pe.unidade_id = %s"
-            params.append(session.get("unidade_id"))
-        elif session.get("perfil") == "operador":
-            sql += " AND p.unidade_id = %s"
-            params.append(session.get("unidade_id"))
+            # Pendencias cuja "Unidade da Ocorrencia" e uma das unidades do usuario
+            # logado, independente de onde o prontuario esteja agora no fluxo.
+            sql += " AND pe.unidade_id = ANY(%s)"
+            params.append(session.get("unidade_ids") or [])
+        elif session.get("perfil") != "admin" and session.get("unidade_ids"):
+            sql += " AND p.unidade_id = ANY(%s)"
+            params.append(session.get("unidade_ids"))
         sql += " ORDER BY pe.data_abertura DESC LIMIT 300"
         rows = db.query(sql, params)
         anexar_unidade_nome(rows)
@@ -1417,7 +1463,8 @@ def register_routes(app):
         pendencia = db.query("SELECT * FROM pendencias WHERE id = %s", (pendencia_id,), fetchone=True)
         if not pendencia:
             return jsonify({"erro": "pendencia nao encontrada"}), 404
-        if session.get("perfil") == "operador" and pendencia["unidade_id"] != session.get("unidade_id"):
+        unidade_ids = session.get("unidade_ids") or []
+        if session.get("perfil") != "admin" and unidade_ids and pendencia["unidade_id"] not in unidade_ids:
             return jsonify({"erro": "sem permissao para resolver esta pendencia"}), 403
 
         db.execute(
@@ -1756,10 +1803,21 @@ def register_routes(app):
     @perfil_required("admin")
     def api_listar_usuarios():
         rows = db.query(
-            """SELECT id, nome, login, email, perfil, unidade_id, ativo, criado_em, ultimo_login
-               FROM usuarios ORDER BY nome"""
+            """SELECT u.id, u.nome, u.login, u.email, u.perfil, u.ativo, u.criado_em, u.ultimo_login,
+                      u.tela_inicial,
+                      COALESCE(array_agg(uu.unidade_id) FILTER (WHERE uu.unidade_id IS NOT NULL), '{}')
+                          AS unidade_ids
+               FROM usuarios u
+               LEFT JOIN usuario_unidades uu ON uu.usuario_id = u.id
+               GROUP BY u.id
+               ORDER BY u.nome"""
         )
-        anexar_unidade_nome(rows)
+        todos_ids = [i for row in rows for i in row["unidade_ids"]]
+        mapa_nomes = mapa_nomes_unidades(todos_ids)
+        for row in rows:
+            row["unidade_nome"] = ", ".join(
+                mapa_nomes.get(i, str(i)) for i in row["unidade_ids"]
+            ) or None
         return jsonify(rows)
 
     @app.route("/api/usuarios", methods=["POST"])
@@ -1775,13 +1833,18 @@ def register_routes(app):
         if not nome or not login_novo or not senha:
             return jsonify({"erro": "nome, login e senha sao obrigatorios"}), 400
 
+        tela_inicial = data.get("tela_inicial") or None
+        if tela_inicial and tela_inicial not in {chave for chave, _ in PAGINAS_SELECIONAVEIS}:
+            return jsonify({"erro": "tela inicial invalida"}), 400
+
         senha_hash = generate_password_hash(senha)
         novo = db.execute(
-            """INSERT INTO usuarios (nome, login, email, senha_hash, perfil, unidade_id)
+            """INSERT INTO usuarios (nome, login, email, senha_hash, perfil, tela_inicial)
                VALUES (%s,%s,%s,%s,%s,%s)
-               RETURNING id, nome, login, email, perfil, unidade_id, ativo""",
-            (nome, login_novo, data.get("email"), senha_hash, perfil, data.get("unidade_id"))
+               RETURNING id, nome, login, email, perfil, ativo, tela_inicial""",
+            (nome, login_novo, data.get("email"), senha_hash, perfil, tela_inicial)
         )
+        salvar_unidades_usuario(novo["id"], data.get("unidade_ids"))
         return jsonify(novo), 201
 
     @app.route("/api/usuarios/<int:usuario_id>", methods=["PUT"])
@@ -1793,13 +1856,18 @@ def register_routes(app):
             senha_hash = generate_password_hash(data["senha"])
             db.execute("UPDATE usuarios SET senha_hash = %s WHERE id = %s", (senha_hash, usuario_id))
 
+        tela_inicial = data.get("tela_inicial") or None
+        if tela_inicial and tela_inicial not in {chave for chave, _ in PAGINAS_SELECIONAVEIS}:
+            return jsonify({"erro": "tela inicial invalida"}), 400
+
         atualizado = db.execute(
-            """UPDATE usuarios SET nome=%s, email=%s, perfil=%s, unidade_id=%s, ativo=%s
+            """UPDATE usuarios SET nome=%s, email=%s, perfil=%s, ativo=%s, tela_inicial=%s
                WHERE id=%s
-               RETURNING id, nome, login, email, perfil, unidade_id, ativo""",
+               RETURNING id, nome, login, email, perfil, ativo, tela_inicial""",
             (data.get("nome"), data.get("email"), data.get("perfil"),
-             data.get("unidade_id"), data.get("ativo", True), usuario_id)
+             data.get("ativo", True), tela_inicial, usuario_id)
         )
+        salvar_unidades_usuario(usuario_id, data.get("unidade_ids"))
         return jsonify(atualizado)
 
     @app.route("/api/usuarios/<int:usuario_id>", methods=["DELETE"])
@@ -2027,6 +2095,7 @@ def register_routes(app):
             "paginas_permitidas": paginas_permitidas,
             "status_label": STATUS_LABEL,
             "ambiente_homolog": os.environ.get("AMBIENTE", "").strip().lower() == "homolog",
+            "url_homologacao": _url_homologacao(),
         }
 
 
