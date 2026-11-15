@@ -1143,6 +1143,12 @@ def register_routes(app):
         if prazo:
             pendentes = [a for a in pendentes if dentro_do_filtro_prazo(a["dias_desde_alta"], prazo)]
         total = len(pendentes)
+
+        # Para exportar o relatorio (PDF/Excel), devolve todos os itens
+        # filtrados de uma vez, sem paginar.
+        if request.args.get("exportar"):
+            return jsonify({"itens": pendentes, "total": total})
+
         total_paginas = max(1, (total + POR_PAGINA - 1) // POR_PAGINA)
         pagina = min(pagina, total_paginas)
         inicio = (pagina - 1) * POR_PAGINA

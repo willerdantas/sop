@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "_icons.html" as icons %}
+{% import "_exportar.html" as exportar %}
 {% block titulo %}SOP{% endblock %}
 {% block titulo_pagina %}SOP · Serviço de Organização de Prontuários{% endblock %}
 {% block subtitulo_pagina %}Recebimento, conferência e envio para Contas Médicas{% endblock %}
@@ -53,7 +54,13 @@
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Altas</h3>
-    <span class="texto-suave" id="contador-altas">Carregando...</span>
+    <div class="flex-entre" style="gap:16px;">
+      <span class="texto-suave" id="contador-altas">Carregando...</span>
+      <div class="acoes-linha">
+        <button class="btn btn-outline btn-sm" type="button" onclick="exportarAltasPDF()">PDF</button>
+        <button class="btn btn-outline btn-sm" type="button" onclick="exportarAltasExcel()">Excel</button>
+      </div>
+    </div>
   </div>
   <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
     Altas recebidas do sistema hospitalar (Residência, Outro hospital ou Óbito) ainda não registradas no fluxo.
@@ -99,7 +106,10 @@
 </div>
 
 <div class="card-branco">
-  <h3>Prontuários no SOP</h3>
+  <div class="flex-entre">
+    <h3>Prontuários no SOP</h3>
+    {{ exportar.botoes('tbody-sop', 'Prontuários no SOP', 'prontuarios_no_sop') }}
+  </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">
       <thead>
@@ -124,7 +134,10 @@
 </div>
 
 <div class="card-branco">
-  <h3>Prontuários Enviados para Contas Médicas</h3>
+  <div class="flex-entre">
+    <h3>Prontuários Enviados para Contas Médicas</h3>
+    {{ exportar.botoes('tbody-enviados-contas', 'Prontuários Enviados para Contas Médicas', 'enviados_contas_medicas') }}
+  </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">
       <thead>
@@ -235,5 +248,9 @@
 {% endblock %}
 
 {% block scripts_extra %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="{{ url_for('static', filename='js/exportar.js') }}"></script>
 <script src="{{ url_for('static', filename='js/sop.js') }}"></script>
 {% endblock %}

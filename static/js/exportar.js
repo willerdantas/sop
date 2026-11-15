@@ -1,19 +1,23 @@
 /**
- * exportar.js - exportacao de tabelas renderizadas para PDF e Excel.
- * Le a tabela ja exibida na tela (respeitando os filtros aplicados no
- * momento), ignorando a coluna "Ações" e a linha de "vazio-estado".
+ * exportar.js - exportacao de tabelas para PDF e Excel.
+ * Para tabelas sem paginacao, le a tabela ja exibida na tela (respeitando
+ * os filtros aplicados), ignorando a coluna "Ações" e a linha de
+ * "vazio-estado". Para tabelas paginadas (ex: Altas), quem chama deve
+ * buscar todos os dados primeiro e usar gerarPDF/gerarExcel diretamente,
+ * para nao exportar so a pagina atual.
  * Usa SheetJS (xlsx) e jsPDF + jspdf-autotable, carregados via CDN.
  */
 
-function extrairDadosTabela(tabelaId) {
-  const tabela = document.getElementById(tabelaId);
+function extrairDadosTabela(tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  const tabela = tbody.closest("table");
   const headers = Array.from(tabela.querySelectorAll("thead th")).map((th) => th.textContent.trim());
   const indicesValidos = headers
     .map((h, i) => (h === "Ações" ? -1 : i))
     .filter((i) => i !== -1);
   const cabecalhos = indicesValidos.map((i) => headers[i]);
 
-  const linhas = Array.from(tabela.querySelectorAll("tbody tr"))
+  const linhas = Array.from(tbody.querySelectorAll("tr"))
     .filter((tr) => tr.children.length > 1)
     .map((tr) => {
       const celulas = Array.from(tr.querySelectorAll("td"));
@@ -23,8 +27,7 @@ function extrairDadosTabela(tabelaId) {
   return { cabecalhos, linhas };
 }
 
-function exportarExcel(tabelaId, nomeArquivo) {
-  const { cabecalhos, linhas } = extrairDadosTabela(tabelaId);
+function gerarExcel(cabecalhos, linhas, nomeArquivo) {
   if (!linhas.length) {
     alert("Nenhum dado para exportar.");
     return;
@@ -35,8 +38,7 @@ function exportarExcel(tabelaId, nomeArquivo) {
   XLSX.writeFile(livro, `${nomeArquivo}.xlsx`);
 }
 
-function exportarPDF(tabelaId, titulo, nomeArquivo) {
-  const { cabecalhos, linhas } = extrairDadosTabela(tabelaId);
+function gerarPDF(cabecalhos, linhas, titulo, nomeArquivo) {
   if (!linhas.length) {
     alert("Nenhum dado para exportar.");
     return;
@@ -55,4 +57,14 @@ function exportarPDF(tabelaId, titulo, nomeArquivo) {
     headStyles: { fillColor: [0, 128, 128] },
   });
   doc.save(`${nomeArquivo}.pdf`);
+}
+
+function exportarExcel(tbodyId, nomeArquivo) {
+  const { cabecalhos, linhas } = extrairDadosTabela(tbodyId);
+  gerarExcel(cabecalhos, linhas, nomeArquivo);
+}
+
+function exportarPDF(tbodyId, titulo, nomeArquivo) {
+  const { cabecalhos, linhas } = extrairDadosTabela(tbodyId);
+  gerarPDF(cabecalhos, linhas, titulo, nomeArquivo);
 }

@@ -200,6 +200,56 @@ const DESTINO_BADGE_CLASSE = {
   "Óbito": "badge-pendencia",
 };
 
+function formatarHorasTexto(horas) {
+  if (horas === null || horas === undefined) return "-";
+  const horasInt = Math.floor(horas);
+  const minutos = Math.round((horas - horasInt) * 60);
+  return `${horasInt}h ${String(minutos).padStart(2, "0")}min`;
+}
+
+async function buscarTodasAltasParaExportar() {
+  const prazo = document.getElementById("filtro-prazo-altas").value;
+  const params = new URLSearchParams({ exportar: "1" });
+  if (prazo) params.set("prazo", prazo);
+
+  const resp = await apiFetch(`/api/altas?${params.toString()}`);
+  const cabecalhos = [
+    "Nº Internação", "Nº Prontuário", "Paciente", "Unidade", "Internação",
+    "Alta", "Destino", "Motivo Alta", "Tempo", "Dias desde Alta",
+  ];
+  const linhas = resp.itens.map((a) => [
+    a.isn_internacao,
+    a.num_prontuario || "não informado",
+    a.paciente_nome,
+    a.unidade_nome || "-",
+    formatarDataSimples(a.dat_internacao),
+    `${formatarDataSimples(a.dat_alta)}${a.hor_alta ? " " + a.hor_alta : ""}`,
+    a.dsc_destino || "-",
+    a.dsc_motivo_alta || "-",
+    formatarHorasTexto(a.horas_uteis_desde_alta),
+    a.dias_desde_alta !== null && a.dias_desde_alta !== undefined ? `${a.dias_desde_alta} dia(s)` : "-",
+  ]);
+  return { cabecalhos, linhas };
+}
+
+async function exportarAltasPDF() {
+  try {
+    const { cabecalhos, linhas } = await buscarTodasAltasParaExportar();
+    gerarPDF(cabecalhos, linhas, "Altas", "altas");
+  } catch (e) {
+    alert("Erro ao buscar dados para exportar: " + e.message);
+  }
+}
+
+async function exportarAltasExcel() {
+  try {
+    const { cabecalhos, linhas } = await buscarTodasAltasParaExportar();
+    gerarExcel(cabecalhos, linhas, "altas");
+  } catch (e) {
+    alert("Erro ao buscar dados para exportar: " + e.message);
+  }
+}
+
 async function carregarAltas(pagina) {
   const tbody = document.getElementById("tbody-altas");
   const contador = document.getElementById("contador-altas");
