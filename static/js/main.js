@@ -429,11 +429,13 @@ async function enviarProntuarioParaUnidade(prontuarioId, aoConcluir) {
 }
 
 /* ---------------------------------------------------------
- * PRESCRICOES NO REGISTRO DE PENDENCIA (Analise SOP e Contas Medicas)
- * Lista as prescricoes nao canceladas da internacao e, ao clicar em
- * "Usar", preenche unidade, profissional, data e descricao da pendencia.
+ * PRESCRICOES E EVOLUCOES NO REGISTRO DE PENDENCIA (Analise SOP e Contas Medicas)
+ * Duas listas suspensas com as prescricoes (nao canceladas) e as evolucoes
+ * da internacao. So uma origem por pendencia: escolher uma prescricao limpa
+ * a evolucao e vice-versa. A escolha preenche unidade, profissional, data e
+ * um resumo no inicio da descricao.
  * --------------------------------------------------------- */
-let PRESCRICOES_PENDENCIA = null;
+const ORIGENS_PENDENCIA = { prescricoes: null, evolucoes: null };
 
 function profissionalComConselho(nome, conselho, numero) {
   if (!nome) return "-";
@@ -441,72 +443,142 @@ function profissionalComConselho(nome, conselho, numero) {
   return registro ? `${nome} (${registro})` : nome;
 }
 
-async function carregarPrescricoesPendencia(prontuarioId) {
-  const tbody = document.getElementById("tbody-prescricoes-pendencia");
-  if (!tbody) return;
-  try {
-    if (PRESCRICOES_PENDENCIA === null) {
-      PRESCRICOES_PENDENCIA = await apiFetch(`/api/prontuarios/${encodeURIComponent(prontuarioId)}/prescricoes`);
-    }
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar prescrições: ${esc(e.message)}</td></tr>`;
-    return;
-  }
-  if (!PRESCRICOES_PENDENCIA.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhuma prescrição (não cancelada) nesta internação.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = PRESCRICOES_PENDENCIA.map((p, i) => `
-    <tr>
-      <td>${esc(formatarData(p.dat_prescricao))}</td>
-      <td>${esc(p.tipo || "-")}</td>
-      <td>${esc(profissionalComConselho(p.profissional_nome, p.profissional_conselho, p.profissional_num_conselho))}</td>
-      <td>${esc(profissionalComConselho(p.aprazamento_nome, p.aprazamento_conselho, p.aprazamento_num_conselho))}</td>
-      <td>${esc([p.dsc_clinica, p.dsc_enfermaria, p.dsc_leito].filter(Boolean).join(" / ") || "-")}</td>
-      <td><button type="button" class="btn btn-outline btn-sm" onclick="usarPrescricaoNaPendencia(${i})">Usar</button></td>
-    </tr>
-  `).join("");
-}
-
-function usarPrescricaoNaPendencia(indice) {
-  const p = (PRESCRICOES_PENDENCIA || [])[indice];
-  const form = document.getElementById("form-nova-pendencia");
-  if (!p || !form) return;
-
-  // Unidade: a clinica do leito da prescricao, se estiver entre as opcoes.
-  const selUnidade = form.querySelector('[name="unidade_id"]');
-  if (p.isn_clinica !== null && selUnidade.querySelector(`option[value="${p.isn_clinica}"]`)) {
-    selUnidade.value = String(p.isn_clinica);
-  }
-
-  // Data da ocorrencia = data da prescricao (lida em UTC, ver formatarData).
-  const d = new Date(p.dat_prescricao);
-  if (!isNaN(d)) {
-    const dois = (n) => String(n).padStart(2, "0");
-    form.querySelector('[name="data_ocorrencia"]').value =
-      `${d.getUTCFullYear()}-${dois(d.getUTCMonth() + 1)}-${dois(d.getUTCDate())}`;
-  }
-
-  // Profissional: o prescritor, se estiver na lista de profissionais.
-  if (p.profissional_nome && typeof PROFISSIONAIS_CADASTRADOS !== "undefined"
-      && PROFISSIONAIS_CADASTRADOS.includes(p.profissional_nome)) {
-    selecionarProfissional(p.profissional_nome);
-  }
-
-  // Descricao: resumo da prescricao (substitui o resumo anterior, se houver,
-  // e mantem o que o usuario ja escreveu).
-  const resumo = [
+function resumoPrescricao(p) {
+  return [
     `Prescrição ${p.tipo ? p.tipo + " " : ""}de ${formatarData(p.dat_prescricao)}`,
     `Prescritor: ${profissionalComConselho(p.profissional_nome, p.profissional_conselho, p.profissional_num_conselho)}`,
     `Aprazamento: ${profissionalComConselho(p.aprazamento_nome, p.aprazamento_conselho, p.aprazamento_num_conselho)}`,
     `Local: ${[p.dsc_clinica, p.dsc_enfermaria, p.dsc_leito].filter(Boolean).join(" / ") || "-"}`,
   ].join(" | ");
-  const area = form.querySelector('[name="descricao"]');
-  let texto = area.value;
-  if (area.dataset.resumoPrescricao && texto.startsWith(area.dataset.resumoPrescricao)) {
-    texto = texto.slice(area.dataset.resumoPrescricao.length).replace(/^\n/, "");
+}
+
+function resumoEvolucao(ev) {
+  return [
+    `Evolução de ${formatarData(ev.dat_cadastro)}`,
+    `Profissional: ${profissionalComConselho(ev.profissional_nome, ev.profissional_conselho, ev.profissional_num_conselho)}`,
+    `Clínica: ${ev.dsc_clinica || "-"}`,
+  ].join(" | ");
+}
+
+/** Preenche uma lista suspensa (textContent: os nomes nao viram HTML). */
+function montarSelectPendencia(select, itens, vazio, rotulo) {
+  select.innerHTML = "";
+  const primeira = document.createElement("option");
+  primeira.value = "";
+  primeira.textContent = itens.length ? "Nenhuma (não usar)" : vazio;
+  select.appendChild(primeira);
+  itens.forEach((item, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = rotulo(item);
+    select.appendChild(opt);
+  });
+  select.disabled = !itens.length;
+  select.value = "";
+}
+
+async function carregarListaPendencia(selectId, chave, url, vazio, rotulo) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  try {
+    if (ORIGENS_PENDENCIA[chave] === null) {
+      ORIGENS_PENDENCIA[chave] = await apiFetch(url);
+    }
+    montarSelectPendencia(select, ORIGENS_PENDENCIA[chave], vazio, rotulo);
+  } catch (e) {
+    select.innerHTML = "";
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = `Erro ao carregar: ${e.message}`;
+    select.appendChild(opt);
+    select.disabled = true;
   }
-  area.value = `${resumo}\n${texto}`;
-  area.dataset.resumoPrescricao = resumo;
-  area.focus();
+}
+
+function carregarPrescricoesPendencia(prontuarioId) {
+  ligarSelectsPendencia();
+  return carregarListaPendencia(
+    "select-prescricao-pendencia", "prescricoes",
+    `/api/prontuarios/${encodeURIComponent(prontuarioId)}/prescricoes`,
+    "Nenhuma prescrição (não cancelada) nesta internação",
+    (p) => [formatarData(p.dat_prescricao), p.tipo || "Prescrição",
+            profissionalComConselho(p.profissional_nome, p.profissional_conselho, p.profissional_num_conselho),
+            [p.dsc_clinica, p.dsc_enfermaria, p.dsc_leito].filter(Boolean).join(" / ")]
+      .filter(Boolean).join(" · "));
+}
+
+function carregarEvolucoesPendencia(prontuarioId) {
+  ligarSelectsPendencia();
+  return carregarListaPendencia(
+    "select-evolucao-pendencia", "evolucoes",
+    `/api/prontuarios/${encodeURIComponent(prontuarioId)}/evolucoes`,
+    "Nenhuma evolução nesta internação",
+    (ev) => [formatarData(ev.dat_cadastro),
+             profissionalComConselho(ev.profissional_nome, ev.profissional_conselho, ev.profissional_num_conselho),
+             ev.dsc_clinica].filter(Boolean).join(" · "));
+}
+
+/** Liga (uma vez) os eventos das duas listas: so uma origem por pendencia. */
+function ligarSelectsPendencia() {
+  const selPresc = document.getElementById("select-prescricao-pendencia");
+  const selEvol = document.getElementById("select-evolucao-pendencia");
+  if (!selPresc || !selEvol || selPresc.dataset.ligado) return;
+  selPresc.dataset.ligado = "1";
+
+  selPresc.addEventListener("change", () => {
+    selEvol.value = "";
+    const p = selPresc.value === "" ? null : (ORIGENS_PENDENCIA.prescricoes || [])[Number(selPresc.value)];
+    if (!p) { removerResumoPendencia(); return; }
+    preencherPendencia({ isnClinica: p.isn_clinica, dataHora: p.dat_prescricao,
+                         profissionalNome: p.profissional_nome, resumo: resumoPrescricao(p) });
+  });
+  selEvol.addEventListener("change", () => {
+    selPresc.value = "";
+    const ev = selEvol.value === "" ? null : (ORIGENS_PENDENCIA.evolucoes || [])[Number(selEvol.value)];
+    if (!ev) { removerResumoPendencia(); return; }
+    preencherPendencia({ isnClinica: ev.isn_clinica, dataHora: ev.dat_cadastro,
+                         profissionalNome: ev.profissional_nome, resumo: resumoEvolucao(ev) });
+  });
+}
+
+/** Tira da descricao o resumo colocado pela ultima escolha (se ainda estiver la). */
+function removerResumoPendencia() {
+  const area = document.querySelector('#form-nova-pendencia [name="descricao"]');
+  if (!area) return;
+  const resumo = area.dataset.resumoOrigem;
+  if (resumo && area.value.startsWith(resumo)) {
+    area.value = area.value.slice(resumo.length).replace(/^\n/, "");
+  }
+  delete area.dataset.resumoOrigem;
+}
+
+/** Preenche o formulario de pendencia: unidade (se for uma das opcoes),
+ * data da ocorrencia, profissional (se estiver na lista) e um resumo no
+ * inicio da descricao (trocado, e nao repetido, a cada nova escolha). */
+function preencherPendencia({ isnClinica, dataHora, profissionalNome, resumo }) {
+  const form = document.getElementById("form-nova-pendencia");
+  if (!form) return;
+
+  const selUnidade = form.querySelector('[name="unidade_id"]');
+  if (isnClinica !== null && isnClinica !== undefined
+      && selUnidade.querySelector(`option[value="${isnClinica}"]`)) {
+    selUnidade.value = String(isnClinica);
+  }
+
+  const d = new Date(dataHora);
+  if (dataHora && !isNaN(d)) {
+    const dois = (n) => String(n).padStart(2, "0");
+    form.querySelector('[name="data_ocorrencia"]').value =
+      `${d.getUTCFullYear()}-${dois(d.getUTCMonth() + 1)}-${dois(d.getUTCDate())}`;
+  }
+
+  if (profissionalNome && typeof PROFISSIONAIS_CADASTRADOS !== "undefined"
+      && PROFISSIONAIS_CADASTRADOS.includes(profissionalNome)) {
+    selecionarProfissional(profissionalNome);
+  }
+
+  removerResumoPendencia();
+  const area = form.querySelector('[name="descricao"]');
+  area.value = area.value ? `${resumo}\n${area.value}` : `${resumo}\n`;
+  area.dataset.resumoOrigem = resumo;
 }

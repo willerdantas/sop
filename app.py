@@ -41,6 +41,8 @@ except FileExistsError:
 load_dotenv(CAMINHO_ENV)
 
 import psycopg2
+import psycopg2.errors
+import psycopg2.extras
 from psycopg2 import sql as psql
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -164,11 +166,33 @@ def primeiras_entradas_internacao(isns_internacao_leito):
 
 def anexar_internacao_total(linhas):
     """Preenche 'internacao_total_dias' (alta - primeiro leito) nos
-    prontuarios. 0 = internacao de menos de um dia (etiqueta "24h")."""
-    primeiras = primeiras_entradas_internacao(r.get("integra_isn_internacao_leito") for r in linhas)
+    prontuarios. 0 = internacao de menos de um dia (etiqueta "24h").
+
+    A data do primeiro leito fica gravada em prontuarios.internacao_inicio:
+    o sistema hospitalar so e consultado (em lote) para os prontuarios que
+    ainda nao a tem. Se a consulta falhar, usa a data de internacao do
+    prontuario e tenta de novo numa proxima vez - nunca derruba a lista."""
+    faltando = [r for r in linhas if r.get("integra_isn_internacao_leito") and not r.get("internacao_inicio")]
+    if faltando:
+        try:
+            primeiras = primeiras_entradas_internacao(r["integra_isn_internacao_leito"] for r in faltando)
+            gravar = []
+            for r in faltando:
+                inicio = primeiras.get(int(r["integra_isn_internacao_leito"]))
+                if inicio:
+                    r["internacao_inicio"] = inicio
+                    gravar.append((inicio, r["id"]))
+            if gravar:
+                conn = db.get_conn()
+                with conn.cursor() as cur:
+                    psycopg2.extras.execute_batch(
+                        cur, "UPDATE prontuarios SET internacao_inicio = %s WHERE id = %s", gravar)
+                conn.commit()
+        except psycopg2.Error as exc:
+            db.descartar_transacao()
+            print(f"[aviso] data do primeiro leito nao obtida: {exc}".strip())
     for r in linhas:
-        isn = r.get("integra_isn_internacao_leito")
-        entrada = (primeiras.get(int(isn)) if isn else None) or r.get("data_internacao")
+        entrada = r.get("internacao_inicio") or r.get("data_internacao")
         alta = r.get("data_alta")
         r["internacao_total_dias"] = (alta - entrada).days if (alta and entrada) else None
     return linhas
@@ -256,9 +280,27 @@ def listar_profissionais_integra():
              "conselho": r["conselho"], "numero_conselho": r["num_conselho"]} for r in rows]
 
 
+# Erros de tabela/coluna inexistente ou sem permissao no sistema hospitalar:
+# usados nas funcoes que dependem das tabelas opcionais (db.TABELAS_INTEGRA_OPCIONAIS).
+ERROS_TABELA_OPCIONAL = (psycopg2.errors.UndefinedTable, psycopg2.errors.UndefinedColumn,
+                         psycopg2.errors.InsufficientPrivilege)
+
+
+def resposta_tabela_indisponivel(recurso, exc):
+    """503 com mensagem clara quando uma tabela opcional falta ou nao pode ser lida."""
+    print(f"[aviso] {recurso} indisponivel: {exc.pgerror or exc}".strip())
+    return jsonify({"erro": f"{recurso} indisponivel: tabela ausente no sistema hospitalar "
+                            "ou sem permissao de leitura (ver sql/permissoes.sql)."}), 503
+
+
 def nomes_profissionais_integra():
-    """Nomes distintos dos profissionais (busca no registro de pendencias)."""
-    return sorted({p["nome"] for p in listar_profissionais_integra()})
+    """Nomes distintos dos profissionais (busca no registro de pendencias).
+    Lista vazia se a tabela de profissionais estiver indisponivel."""
+    try:
+        return sorted({p["nome"] for p in listar_profissionais_integra()})
+    except ERROS_TABELA_OPCIONAL as exc:
+        print(f"[aviso] profissionais indisponiveis: {exc.pgerror or exc}".strip())
+        return []
 
 
 _CACHE_COLUNAS_INTEGRA = {}
@@ -330,6 +372,40 @@ def listar_prescricoes_internacao(isn_internacao):
         WHERE pr.isn_internacao = %s AND pr.dat_cancelamento IS NULL
         ORDER BY pr.dat_prescricao DESC
         LIMIT 1000""").format(tipo=tipo_sql, apz_campos=apz_campos, apz_join=apz_join)
+    rows = db.query_integra(consulta, (isn_internacao,))
+    for r in rows:
+        r["isn_clinica"] = int(r["isn_clinica"]) if r["isn_clinica"] is not None else None
+    return rows
+
+
+def listar_evolucoes_internacao(isn_internacao):
+    """Evolucoes (t_internacao_evolucao) da internacao, com o profissional
+    (nome, conselho e numero), a data (dat_cadastro) e a clinica do leito."""
+    if not isn_internacao:
+        return []
+    col_prof = _primeira_coluna("t_internacao_evolucao",
+                                ("isn_profissional", "isn_usuario", "isn_usuario_cadastro"))
+    if col_prof:
+        prof_join = psql.SQL(
+            """LEFT JOIN t_profissional prof ON prof.isn_usuario = ev.{}
+        LEFT JOIN t_conselho cprof ON cprof.isn_conselho = prof.isn_conselho"""
+        ).format(psql.Identifier(col_prof))
+        prof_campos = psql.SQL("""TRIM(prof.dsc_usuario) AS profissional_nome,
+               TRIM(prof.num_conselho::text) AS profissional_num_conselho,
+               TRIM(cprof.cod_conselho::text) AS profissional_conselho""")
+    else:
+        prof_join = psql.SQL("")
+        prof_campos = psql.SQL("""NULL AS profissional_nome, NULL AS profissional_num_conselho,
+               NULL AS profissional_conselho""")
+    consulta = psql.SQL("""
+        SELECT ev.dat_cadastro, {prof_campos}, il.isn_clinica, c.dsc_clinica
+        FROM t_internacao_evolucao ev
+        {prof_join}
+        LEFT JOIN t_internacao_leito il ON il.isn_internacao_leito = ev.isn_internacao_leito
+        LEFT JOIN t_clinica c ON c.isn_clinica = il.isn_clinica
+        WHERE ev.isn_internacao = %s
+        ORDER BY ev.dat_cadastro DESC
+        LIMIT 1000""").format(prof_campos=prof_campos, prof_join=prof_join)
     rows = db.query_integra(consulta, (isn_internacao,))
     for r in rows:
         r["isn_clinica"] = int(r["isn_clinica"]) if r["isn_clinica"] is not None else None
@@ -840,6 +916,7 @@ ENDPOINT_PARA_PAGINAS = {
     "api_unidades_envio_prontuario": ("sop",),
     "api_confirmar_recebimento_sop": ("sop",),
     "api_prescricoes_prontuario": ("sop", "contas_medicas"),
+    "api_evolucoes_prontuario": ("sop", "contas_medicas"),
     "api_confirmar_recebimento_prontuario": ("contas_medicas",),
     "api_editar_valores_faturamento": ("contas_medicas",),
     "api_registrar_analise_auditoria": ("contas_medicas",),
@@ -1555,7 +1632,24 @@ def register_routes(app):
         if erro:
             return erro
         isn_internacao, _ = historico_internacao(atual.get("integra_isn_internacao_leito"))
-        return jsonify(listar_prescricoes_internacao(isn_internacao))
+        try:
+            return jsonify(listar_prescricoes_internacao(isn_internacao))
+        except ERROS_TABELA_OPCIONAL as exc:
+            return resposta_tabela_indisponivel("Prescricoes", exc)
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/evolucoes", methods=["GET"])
+    @login_required
+    def api_evolucoes_prontuario(prontuario_id):
+        """Evolucoes da internacao do prontuario, para preencher o registro
+        de pendencia (ver listar_evolucoes_internacao)."""
+        atual, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
+        isn_internacao, _ = historico_internacao(atual.get("integra_isn_internacao_leito"))
+        try:
+            return jsonify(listar_evolucoes_internacao(isn_internacao))
+        except ERROS_TABELA_OPCIONAL as exc:
+            return resposta_tabela_indisponivel("Evolucoes", exc)
 
     @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento-sop", methods=["POST"])
     @login_required
@@ -1871,10 +1965,15 @@ def register_routes(app):
         ):
             return jsonify({"erro": "tipo de pendencia invalido"}), 400
         # Profissional e opcional; se informado, tem que existir no sistema hospitalar.
-        if profissional and not db.query_integra(
-            "SELECT 1 FROM t_profissional WHERE TRIM(dsc_usuario) = %s LIMIT 1", (profissional,), fetchone=True
-        ):
-            return jsonify({"erro": "profissional nao encontrado no sistema hospitalar"}), 400
+        if profissional:
+            try:
+                existe = db.query_integra(
+                    "SELECT 1 FROM t_profissional WHERE TRIM(dsc_usuario) = %s LIMIT 1",
+                    (profissional,), fetchone=True)
+            except ERROS_TABELA_OPCIONAL as exc:
+                return resposta_tabela_indisponivel("Validacao do profissional", exc)
+            if not existe:
+                return jsonify({"erro": "profissional nao encontrado no sistema hospitalar"}), 400
 
         prontuario_row, erro = obter_prontuario_autorizado(prontuario_id)
         if erro:
@@ -2087,7 +2186,10 @@ def register_routes(app):
     @app.route("/api/profissionais", methods=["GET"])
     @login_required
     def api_listar_profissionais():
-        return jsonify(listar_profissionais_integra())
+        try:
+            return jsonify(listar_profissionais_integra())
+        except ERROS_TABELA_OPCIONAL as exc:
+            return resposta_tabela_indisponivel("Profissionais", exc)
 
     # -----------------------------------------------------------
     # API - PROCEDIMENTOS SIGTAP (catalogo, CRUD)

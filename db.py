@@ -19,13 +19,25 @@ from flask import g, has_request_context, session
 from config import SCHEMA_VALIDO
 
 # Tabelas do sistema hospitalar consultadas pela app (todas no schema
-# configurado em INTEGRA_SCHEMA).
+# configurado em INTEGRA_SCHEMA). Sem uma tabela obrigatoria a app nao sobe
+# (fica no modo de configuracao).
 TABELAS_INTEGRA = (
     "t_clinica", "t_enfermaria", "t_leito", "t_internacao", "t_internacao_leito",
     "t_paciente", "t_destino", "t_exame", "t_exame_solic", "t_admissao", "t_cid10",
-    "t_internacao_alta", "t_motivo_alta", "t_profissional", "t_conselho",
-    "t_prescricao_pep", "t_tipo_prescricao",
+    "t_internacao_alta", "t_motivo_alta",
 )
+# Opcionais: sem elas (ou sem permissao de leitura nelas) so a funcao que as
+# usa fica indisponivel - profissionais, prescricoes e evolucoes no registro
+# de pendencia. A falta e avisada no log, sem derrubar o sistema.
+TABELAS_INTEGRA_OPCIONAIS = (
+    "t_profissional", "t_conselho", "t_prescricao_pep", "t_tipo_prescricao",
+    "t_internacao_evolucao",
+)
+
+# Consulta ao sistema hospitalar mais demorada que isto e cancelada pelo
+# proprio Postgres: a tela mostra um erro em vez de a conexao cair (o
+# gunicorn derruba requisicoes que passam do seu --timeout).
+INTEGRA_TIMEOUT_MS = 60000
 
 _pool = None
 _pool_integra = None
@@ -168,7 +180,7 @@ def verificar_schema_integra(dsn, schema):
             cur.execute(
                 """SELECT table_name FROM information_schema.tables
                    WHERE table_schema = %s AND table_name = ANY(%s)""",
-                (schema, list(TABELAS_INTEGRA)),
+                (schema, list(TABELAS_INTEGRA + TABELAS_INTEGRA_OPCIONAIS)),
             )
             encontradas = {linha[0] for linha in cur.fetchall()}
     except (psycopg2.Error, UnicodeDecodeError) as exc:
@@ -178,6 +190,10 @@ def verificar_schema_integra(dsn, schema):
     faltando = [t for t in TABELAS_INTEGRA if t not in encontradas]
     if faltando:
         return f'O schema "{schema}" não tem as tabelas: {", ".join(faltando)}.'
+    opcionais = [t for t in TABELAS_INTEGRA_OPCIONAIS if t not in encontradas]
+    if opcionais:
+        print(f'[aviso] schema "{schema}" sem acesso as tabelas opcionais {", ".join(opcionais)}: '
+              "profissionais/prescricoes/evolucoes ficam indisponiveis (ver sql/permissoes.sql).")
     return None
 
 
@@ -208,7 +224,8 @@ def substituir_pools(dsn, dsn_integra, schema_integra):
     novo = _criar_pool(dsn, 10, "Banco principal (sop)")
     try:
         novo_integra = _criar_pool(dsn_integra, 5, rotulo_integra,
-                                   options=f'-c search_path="{schema_integra}"')
+                                   options=f'-c search_path="{schema_integra}" '
+                                           f'-c statement_timeout={INTEGRA_TIMEOUT_MS}')
     except BancoIndisponivel:
         novo.closeall()
         raise

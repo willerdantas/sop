@@ -313,25 +313,13 @@
     <h3>Registrar Pendência</h3>
     <form id="form-nova-pendencia">
       <div class="campo">
-        <label>Prescrições da internação</label>
-        <small class="texto-suave">Opcional: clique em "Usar" para preencher a pendência com os dados da prescrição.</small>
-        <div class="tabela-wrap" style="max-height:240px; overflow-y:auto; margin-top:6px;">
-          <table class="tabela-padrao">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Tipo</th>
-                <th>Prescritor</th>
-                <th>Aprazamento</th>
-                <th>Clínica / Enfermaria / Leito</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="tbody-prescricoes-pendencia">
-              <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
-            </tbody>
-          </table>
-        </div>
+        <label for="select-prescricao-pendencia">Prescrição da internação</label>
+        <select id="select-prescricao-pendencia"><option value="">Carregando...</option></select>
+      </div>
+      <div class="campo">
+        <label for="select-evolucao-pendencia">Evolução da internação</label>
+        <select id="select-evolucao-pendencia"><option value="">Carregando...</option></select>
+        <small class="texto-suave">Opcional: escolha <strong>uma</strong> prescrição <strong>ou</strong> uma evolução para preencher a pendência.</small>
       </div>
       <div class="form-grid">
         <div class="campo">

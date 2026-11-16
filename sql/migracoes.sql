@@ -16,3 +16,11 @@ ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS aguardando_recebimento_sop BOOL
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS devolvido_sop_por VARCHAR(30);  -- unidade | contas_medicas
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_sop_em TIMESTAMP;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_sop_usuario_id INTEGER REFERENCES usuarios(id);
+
+-- ---------------------------------------------------------
+-- Data do primeiro leito da internacao (sistema hospitalar), usada no
+-- tempo total de internacao / etiqueta "24h". Preenchida pela app na
+-- primeira vez que o prontuario aparece numa lista; depois nao consulta
+-- mais o sistema hospitalar para isso.
+-- ---------------------------------------------------------
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS internacao_inicio DATE;

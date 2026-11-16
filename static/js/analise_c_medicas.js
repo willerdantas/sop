@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-nova-pendencia").addEventListener("click", () => {
     limparBuscaProfissional();
     carregarPrescricoesPendencia(PRONTUARIO_ID);
+    carregarEvolucoesPendencia(PRONTUARIO_ID);
     abrirModal("modal-nova-pendencia");
   });
 
