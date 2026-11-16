@@ -28,7 +28,16 @@ from dotenv import load_dotenv
 # AMBIENTE=homolog ja vem definido como variavel de ambiente real (pelo
 # docker-compose, via env_file) antes deste load_dotenv rodar.
 ARQUIVO_ENV = ".env.homolog" if os.environ.get("AMBIENTE", "").strip().lower() == "homolog" else ".env"
-load_dotenv(ARQUIVO_ENV)
+CAMINHO_ENV = os.path.join(os.path.dirname(os.path.abspath(__file__)), ARQUIVO_ENV)
+# Servidor novo: o arquivo nao vem do git (tem segredos). Cria em branco;
+# sem conexao configurada a app sobe no modo de configuracao, e a tela
+# /configuracao grava nele a senha do admin e os dados do banco (cifrados).
+try:
+    os.close(os.open(CAMINHO_ENV, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+    print(f"[info] {ARQUIVO_ENV} nao existia: criado em branco (configure em /configuracao).")
+except FileExistsError:
+    pass
+load_dotenv(CAMINHO_ENV)
 
 import psycopg2
 from flask import (
