@@ -267,6 +267,27 @@
     <button class="modal-fechar" data-fechar-modal="modal-nova-pendencia">{{ icons.icone('x') }}</button>
     <h3>Registrar Pendência</h3>
     <form id="form-nova-pendencia">
+      <div class="campo">
+        <label>Prescrições da internação</label>
+        <small class="texto-suave">Opcional: clique em "Usar" para preencher a pendência com os dados da prescrição.</small>
+        <div class="tabela-wrap" style="max-height:240px; overflow-y:auto; margin-top:6px;">
+          <table class="tabela-padrao">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Tipo</th>
+                <th>Prescritor</th>
+                <th>Aprazamento</th>
+                <th>Clínica / Enfermaria / Leito</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tbody-prescricoes-pendencia">
+              <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div class="form-grid">
         <div class="campo">
           <label>Tipo de Pendência *</label>

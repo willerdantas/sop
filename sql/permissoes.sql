@@ -67,5 +67,6 @@ GRANT SELECT ON
     integra_local.t_internacao, integra_local.t_internacao_leito, integra_local.t_paciente,
     integra_local.t_destino, integra_local.t_exame, integra_local.t_exame_solic,
     integra_local.t_admissao, integra_local.t_cid10, integra_local.t_internacao_alta,
-    integra_local.t_motivo_alta, integra_local.t_profissional, integra_local.t_conselho
+    integra_local.t_motivo_alta, integra_local.t_profissional, integra_local.t_conselho,
+    integra_local.t_prescricao_pep, integra_local.t_tipo_prescricao
 TO sop_leitura;

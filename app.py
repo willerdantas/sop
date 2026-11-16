@@ -15,6 +15,7 @@ Execute com:
     flask --app app run --debug
 """
 import calendar
+import time
 import os
 import re
 from datetime import datetime, date, time as dtime, timedelta
@@ -40,6 +41,7 @@ except FileExistsError:
 load_dotenv(CAMINHO_ENV)
 
 import psycopg2
+from psycopg2 import sql as psql
 from flask import (
     Flask, render_template, request, redirect, url_for,
     session, jsonify, flash, g
@@ -257,6 +259,81 @@ def listar_profissionais_integra():
 def nomes_profissionais_integra():
     """Nomes distintos dos profissionais (busca no registro de pendencias)."""
     return sorted({p["nome"] for p in listar_profissionais_integra()})
+
+
+_CACHE_COLUNAS_INTEGRA = {}
+
+
+def colunas_integra(tabela):
+    """Colunas de uma tabela do sistema hospitalar (no schema configurado),
+    guardadas em memoria. Usado onde o nome exato da coluna varia."""
+    chave = (os.environ.get("INTEGRA_SCHEMA", ""), tabela)
+    if chave not in _CACHE_COLUNAS_INTEGRA:
+        rows = db.query_integra(
+            """SELECT attname FROM pg_attribute
+               WHERE attrelid = to_regclass(%s) AND attnum > 0 AND NOT attisdropped""",
+            (tabela,)
+        )
+        _CACHE_COLUNAS_INTEGRA[chave] = {r["attname"] for r in rows}
+    return _CACHE_COLUNAS_INTEGRA[chave]
+
+
+def _primeira_coluna(tabela, candidatas, prefixo=None):
+    colunas = colunas_integra(tabela)
+    for nome in candidatas:
+        if nome in colunas:
+            return nome
+    if prefixo:
+        extras = sorted(c for c in colunas if c.startswith(prefixo))
+        if extras:
+            return extras[0]
+    return None
+
+
+def listar_prescricoes_internacao(isn_internacao):
+    """Prescricoes (t_prescricao_pep) nao canceladas da internacao, com
+    prescritor e profissional do aprazamento (nome, conselho e numero), tipo
+    da prescricao e clinica/enfermaria/leito."""
+    if not isn_internacao:
+        return []
+    col_tipo = _primeira_coluna("t_tipo_prescricao", ("dsc_tipo_prescricao", "dsc_tipo"), prefixo="dsc_")
+    col_apz = _primeira_coluna("t_prescricao_pep", ("isn_profissional_apz", "ian_profissional_apz"))
+    tipo_sql = psql.SQL("tp.{}").format(psql.Identifier(col_tipo)) if col_tipo else psql.SQL("NULL")
+    if col_apz:
+        apz_join = psql.SQL(
+            """LEFT JOIN t_profissional apz ON apz.isn_usuario = pr.{}
+        LEFT JOIN t_conselho capz ON capz.isn_conselho = apz.isn_conselho"""
+        ).format(psql.Identifier(col_apz))
+        apz_campos = psql.SQL("""TRIM(apz.dsc_usuario) AS aprazamento_nome,
+               TRIM(apz.num_conselho::text) AS aprazamento_num_conselho,
+               TRIM(capz.cod_conselho::text) AS aprazamento_conselho""")
+    else:
+        apz_join = psql.SQL("")
+        apz_campos = psql.SQL("""NULL AS aprazamento_nome, NULL AS aprazamento_num_conselho,
+               NULL AS aprazamento_conselho""")
+    consulta = psql.SQL("""
+        SELECT pr.dat_prescricao, {tipo} AS tipo,
+               TRIM(prof.dsc_usuario) AS profissional_nome,
+               TRIM(prof.num_conselho::text) AS profissional_num_conselho,
+               TRIM(cprof.cod_conselho::text) AS profissional_conselho,
+               {apz_campos},
+               il.isn_clinica, c.dsc_clinica, e.dsc_enfermaria, l.dsc_leito
+        FROM t_prescricao_pep pr
+        LEFT JOIN t_tipo_prescricao tp ON tp.isn_tipo_prescricao = pr.isn_tipo_prescricao
+        LEFT JOIN t_profissional prof ON prof.isn_usuario = pr.isn_profissional
+        LEFT JOIN t_conselho cprof ON cprof.isn_conselho = prof.isn_conselho
+        {apz_join}
+        LEFT JOIN t_internacao_leito il ON il.isn_internacao_leito = pr.isn_internacao_leito
+        LEFT JOIN t_clinica c ON c.isn_clinica = il.isn_clinica
+        LEFT JOIN t_enfermaria e ON e.isn_enfermaria = il.isn_enfermaria
+        LEFT JOIN t_leito l ON l.isn_leito = il.isn_leito
+        WHERE pr.isn_internacao = %s AND pr.dat_cancelamento IS NULL
+        ORDER BY pr.dat_prescricao DESC
+        LIMIT 1000""").format(tipo=tipo_sql, apz_campos=apz_campos, apz_join=apz_join)
+    rows = db.query_integra(consulta, (isn_internacao,))
+    for r in rows:
+        r["isn_clinica"] = int(r["isn_clinica"]) if r["isn_clinica"] is not None else None
+    return rows
 
 
 def listar_unidades_locais_opcoes():
@@ -548,50 +625,77 @@ def dentro_do_filtro_prazo(dias, filtro):
     return True
 
 
-def listar_altas_pendentes():
-    """Altas (destino 1/3/4, internacao real) ainda nao registradas no fluxo,
-    com as horas uteis decorridas desde a alta."""
-    altas = db.query_integra(
-        """SELECT * FROM (
+# Resultado da consulta de altas ao sistema hospitalar, reaproveitado por
+# alguns segundos (a lista e paginada no navegador e cada pagina chamava a
+# consulta inteira de novo). A chave inclui o "estado" dos prontuarios ja
+# registrados, entao registrar uma alta invalida o cache na hora.
+_CACHE_ALTAS = {"chave": None, "expira": 0.0, "linhas": None}
+CACHE_ALTAS_SEGUNDOS = 60
+
+
+def _consultar_altas_integra(importadas):
+    """Ultimo leito de cada internacao com alta valida, ainda nao registrada.
+    A consulta pesada (filtro + DISTINCT ON + LIMIT) roda so sobre
+    t_internacao_leito/t_internacao; paciente, clinica, destino, motivo e
+    primeira entrada sao buscados depois, apenas para as linhas exibidas."""
+    return db.query_integra(
+        """WITH ultimas AS (
                SELECT DISTINCT ON (il.isn_internacao)
                       il.isn_internacao_leito, il.isn_internacao, il.isn_clinica,
-                      il.dat_internacao, il.dat_alta, il.hor_alta,
-                      (SELECT MIN(il2.dat_internacao) FROM t_internacao_leito il2
-                         WHERE il2.isn_internacao = il.isn_internacao) AS primeira_entrada,
-                      il.isn_destino, d.dsc_destino, ma.dsc_motivo_alta,
-                      c.dsc_clinica AS unidade_nome,
-                      p.num_prontuario, p.dsc_nome AS paciente_nome
+                      il.dat_internacao, il.dat_alta, il.hor_alta, il.isn_destino,
+                      i.isn_paciente
                FROM t_internacao_leito il
                JOIN t_internacao i ON i.isn_internacao = il.isn_internacao
-               JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
-               LEFT JOIN t_clinica c ON c.isn_clinica = il.isn_clinica
-               LEFT JOIN t_destino d ON d.isn_destino = il.isn_destino
-               LEFT JOIN (
-                   SELECT DISTINCT ON (isn_internacao) isn_internacao, cod_tipo_alta
-                   FROM t_internacao_alta
-                   ORDER BY isn_internacao, dat_cadastro DESC
-               ) ia ON ia.isn_internacao = i.isn_internacao
-               LEFT JOIN t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
                WHERE il.isn_destino = ANY(%s) AND il.dat_alta >= %s
                      AND i.isn_tipo_atendimento = 1
                      AND il.isn_clinica = ANY(%s)
                ORDER BY il.isn_internacao, il.isn_internacao_leito DESC
-           ) ultimas_por_internacao
-           ORDER BY dat_alta ASC, hor_alta ASC
-           LIMIT 500""",
-        (list(ALTAS_DESTINOS_VALIDOS), ALTAS_DATA_INICIO, list(UNIDADES_PERMITIDAS))
+           ),
+           pendentes AS (
+               SELECT * FROM ultimas
+               WHERE isn_internacao_leito <> ALL(%s::BIGINT[])
+               ORDER BY dat_alta ASC, hor_alta ASC
+               LIMIT 500
+           )
+           SELECT pe.*,
+                  (SELECT MIN(il2.dat_internacao) FROM t_internacao_leito il2
+                     WHERE il2.isn_internacao = pe.isn_internacao) AS primeira_entrada,
+                  (SELECT ma.dsc_motivo_alta
+                     FROM t_internacao_alta ia
+                     LEFT JOIN t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
+                     WHERE ia.isn_internacao = pe.isn_internacao
+                     ORDER BY ia.dat_cadastro DESC LIMIT 1) AS dsc_motivo_alta,
+                  d.dsc_destino, c.dsc_clinica AS unidade_nome,
+                  p.num_prontuario, p.dsc_nome AS paciente_nome
+           FROM pendentes pe
+           JOIN t_paciente p ON p.isn_paciente = pe.isn_paciente
+           LEFT JOIN t_clinica c ON c.isn_clinica = pe.isn_clinica
+           LEFT JOIN t_destino d ON d.isn_destino = pe.isn_destino
+           ORDER BY pe.dat_alta ASC, pe.hor_alta ASC""",
+        (list(ALTAS_DESTINOS_VALIDOS), ALTAS_DATA_INICIO, list(UNIDADES_PERMITIDAS), sorted(importadas))
     )
 
+
+def listar_altas_pendentes():
+    """Altas (destino 1/3/4, internacao real) ainda nao registradas no fluxo,
+    com as horas uteis decorridas desde a alta."""
     ja_importadas = db.query(
         "SELECT integra_isn_internacao_leito FROM prontuarios WHERE integra_isn_internacao_leito IS NOT NULL"
     )
-    importadas_ids = {r["integra_isn_internacao_leito"] for r in ja_importadas}
+    importadas = {int(r["integra_isn_internacao_leito"]) for r in ja_importadas}
+    chave = (len(importadas), max(importadas, default=0), sum(importadas))
+    agora_seg = time.monotonic()
+    if _CACHE_ALTAS["chave"] == chave and _CACHE_ALTAS["expira"] > agora_seg:
+        altas = _CACHE_ALTAS["linhas"]
+    else:
+        altas = _consultar_altas_integra(importadas)
+        _CACHE_ALTAS.update(chave=chave, expira=agora_seg + CACHE_ALTAS_SEGUNDOS, linhas=altas)
 
     agora = agora_local()
     pendentes = []
     for a in altas:
         isn = int(a["isn_internacao_leito"])
-        if isn in importadas_ids:
+        if isn in importadas:
             continue
 
         hor_alta = (a["hor_alta"] or "00:00").strip() or "00:00"
@@ -735,6 +839,7 @@ ENDPOINT_PARA_PAGINAS = {
     "api_mover_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_unidades_envio_prontuario": ("sop",),
     "api_confirmar_recebimento_sop": ("sop",),
+    "api_prescricoes_prontuario": ("sop", "contas_medicas"),
     "api_confirmar_recebimento_prontuario": ("contas_medicas",),
     "api_editar_valores_faturamento": ("contas_medicas",),
     "api_registrar_analise_auditoria": ("contas_medicas",),
@@ -1440,6 +1545,17 @@ def register_routes(app):
         )
         atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
         return jsonify(atualizado)
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/prescricoes", methods=["GET"])
+    @login_required
+    def api_prescricoes_prontuario(prontuario_id):
+        """Prescricoes da internacao do prontuario, para preencher o registro
+        de pendencia (ver listar_prescricoes_internacao)."""
+        atual, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
+        isn_internacao, _ = historico_internacao(atual.get("integra_isn_internacao_leito"))
+        return jsonify(listar_prescricoes_internacao(isn_internacao))
 
     @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento-sop", methods=["POST"])
     @login_required

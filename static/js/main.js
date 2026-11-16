@@ -427,3 +427,86 @@ async function enviarProntuarioParaUnidade(prontuarioId, aoConcluir) {
   form.querySelector("#btn-cancelar-envio-unidade").addEventListener("click", () => fecharModal("modal-enviar-unidade"));
   abrirModal("modal-enviar-unidade");
 }
+
+/* ---------------------------------------------------------
+ * PRESCRICOES NO REGISTRO DE PENDENCIA (Analise SOP e Contas Medicas)
+ * Lista as prescricoes nao canceladas da internacao e, ao clicar em
+ * "Usar", preenche unidade, profissional, data e descricao da pendencia.
+ * --------------------------------------------------------- */
+let PRESCRICOES_PENDENCIA = null;
+
+function profissionalComConselho(nome, conselho, numero) {
+  if (!nome) return "-";
+  const registro = [conselho, numero].filter(Boolean).join(" ");
+  return registro ? `${nome} (${registro})` : nome;
+}
+
+async function carregarPrescricoesPendencia(prontuarioId) {
+  const tbody = document.getElementById("tbody-prescricoes-pendencia");
+  if (!tbody) return;
+  try {
+    if (PRESCRICOES_PENDENCIA === null) {
+      PRESCRICOES_PENDENCIA = await apiFetch(`/api/prontuarios/${encodeURIComponent(prontuarioId)}/prescricoes`);
+    }
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar prescrições: ${esc(e.message)}</td></tr>`;
+    return;
+  }
+  if (!PRESCRICOES_PENDENCIA.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhuma prescrição (não cancelada) nesta internação.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = PRESCRICOES_PENDENCIA.map((p, i) => `
+    <tr>
+      <td>${esc(formatarData(p.dat_prescricao))}</td>
+      <td>${esc(p.tipo || "-")}</td>
+      <td>${esc(profissionalComConselho(p.profissional_nome, p.profissional_conselho, p.profissional_num_conselho))}</td>
+      <td>${esc(profissionalComConselho(p.aprazamento_nome, p.aprazamento_conselho, p.aprazamento_num_conselho))}</td>
+      <td>${esc([p.dsc_clinica, p.dsc_enfermaria, p.dsc_leito].filter(Boolean).join(" / ") || "-")}</td>
+      <td><button type="button" class="btn btn-outline btn-sm" onclick="usarPrescricaoNaPendencia(${i})">Usar</button></td>
+    </tr>
+  `).join("");
+}
+
+function usarPrescricaoNaPendencia(indice) {
+  const p = (PRESCRICOES_PENDENCIA || [])[indice];
+  const form = document.getElementById("form-nova-pendencia");
+  if (!p || !form) return;
+
+  // Unidade: a clinica do leito da prescricao, se estiver entre as opcoes.
+  const selUnidade = form.querySelector('[name="unidade_id"]');
+  if (p.isn_clinica !== null && selUnidade.querySelector(`option[value="${p.isn_clinica}"]`)) {
+    selUnidade.value = String(p.isn_clinica);
+  }
+
+  // Data da ocorrencia = data da prescricao (lida em UTC, ver formatarData).
+  const d = new Date(p.dat_prescricao);
+  if (!isNaN(d)) {
+    const dois = (n) => String(n).padStart(2, "0");
+    form.querySelector('[name="data_ocorrencia"]').value =
+      `${d.getUTCFullYear()}-${dois(d.getUTCMonth() + 1)}-${dois(d.getUTCDate())}`;
+  }
+
+  // Profissional: o prescritor, se estiver na lista de profissionais.
+  if (p.profissional_nome && typeof PROFISSIONAIS_CADASTRADOS !== "undefined"
+      && PROFISSIONAIS_CADASTRADOS.includes(p.profissional_nome)) {
+    selecionarProfissional(p.profissional_nome);
+  }
+
+  // Descricao: resumo da prescricao (substitui o resumo anterior, se houver,
+  // e mantem o que o usuario ja escreveu).
+  const resumo = [
+    `Prescrição ${p.tipo ? p.tipo + " " : ""}de ${formatarData(p.dat_prescricao)}`,
+    `Prescritor: ${profissionalComConselho(p.profissional_nome, p.profissional_conselho, p.profissional_num_conselho)}`,
+    `Aprazamento: ${profissionalComConselho(p.aprazamento_nome, p.aprazamento_conselho, p.aprazamento_num_conselho)}`,
+    `Local: ${[p.dsc_clinica, p.dsc_enfermaria, p.dsc_leito].filter(Boolean).join(" / ") || "-"}`,
+  ].join(" | ");
+  const area = form.querySelector('[name="descricao"]');
+  let texto = area.value;
+  if (area.dataset.resumoPrescricao && texto.startsWith(area.dataset.resumoPrescricao)) {
+    texto = texto.slice(area.dataset.resumoPrescricao.length).replace(/^\n/, "");
+  }
+  area.value = `${resumo}\n${texto}`;
+  area.dataset.resumoPrescricao = resumo;
+  area.focus();
+}
