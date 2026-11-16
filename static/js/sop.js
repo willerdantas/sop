@@ -10,6 +10,7 @@ let altasPaginaAtual = 1;
 document.addEventListener("DOMContentLoaded", () => {
   carregarSOP();
   carregarAltas(1);
+  carregarDevolvidos();
   carregarEnviadosUnidade();
   carregarEnviadosContas();
 
@@ -62,7 +63,7 @@ async function carregarSOP() {
   const dataInicio = document.getElementById("filtro-data-inicio").value;
   const dataFim = document.getElementById("filtro-data-fim").value;
 
-  const params = new URLSearchParams({ status: "sop" });
+  const params = new URLSearchParams({ status: "sop", aguardando_sop: "0" });
   if (nome) params.set("nome", nome);
   if (numero) params.set("numero", numero);
   if (dataInicio) params.set("data_inicio", dataInicio);
@@ -141,7 +142,7 @@ function renderizarTabela(lista) {
 
   tbody.innerHTML = lista.map((p) => `
     <tr>
-      <td><strong>${esc(p.numero_prontuario)}</strong></td>
+      <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
       <td>${esc(p.paciente_nome)}</td>
       <td>${esc(p.unidade_nome || "-")}</td>
       <td>${p.prioridade === "urgente" ? '<span class="badge badge-pendencia">Urgente</span>' : "Normal"}</td>
@@ -214,7 +215,7 @@ async function buscarTodasAltasParaExportar() {
     a.paciente_nome,
     a.unidade_nome || "-",
     formatarDataSimples(a.dat_internacao),
-    `${formatarDataSimples(a.dat_alta)}${a.hor_alta ? " " + a.hor_alta : ""}`,
+    `${formatarDataSimples(a.dat_alta)}${a.hor_alta ? " " + formatarHora(a.hor_alta) : ""}`,
     a.dsc_destino || "-",
     a.dsc_motivo_alta || "-",
     formatarHorasTexto(a.horas_uteis_desde_alta),
@@ -269,11 +270,11 @@ async function carregarAltas(pagina) {
     tbody.innerHTML = lista.map((a) => `
       <tr>
         <td>${esc(a.isn_internacao)}</td>
-        <td>${a.num_prontuario ? esc(a.num_prontuario) : '<span class="texto-suave">não informado</span>'}</td>
+        <td>${a.num_prontuario ? esc(a.num_prontuario) : '<span class="texto-suave">não informado</span>'}${etiqueta24h(a.internacao_total_dias)}</td>
         <td>${esc(a.paciente_nome)}</td>
         <td>${esc(a.unidade_nome || "-")}</td>
         <td>${esc(formatarDataSimples(a.dat_internacao))}</td>
-        <td>${esc(formatarDataSimples(a.dat_alta))}${esc(a.hor_alta ? " " + a.hor_alta : "")}</td>
+        <td>${esc(formatarDataSimples(a.dat_alta))}${esc(a.hor_alta ? " " + formatarHora(a.hor_alta) : "")}</td>
         <td><span class="badge ${esc(DESTINO_BADGE_CLASSE[a.dsc_destino] || "badge-unidade")}">${esc(a.dsc_destino || "-")}</span></td>
         <td>${esc(a.dsc_motivo_alta || "-")}</td>
         <td>${formatarTimerHorasUteis(a.horas_uteis_desde_alta)}</td>
@@ -302,7 +303,7 @@ function abrirModalRegistrarAlta(isn) {
   document.getElementById("alta-paciente-nome").textContent = a.paciente_nome || "-";
   document.getElementById("alta-unidade-nome").textContent = a.unidade_nome || "-";
   document.getElementById("alta-data-internacao").textContent = formatarDataSimples(a.dat_internacao);
-  document.getElementById("alta-data-alta").textContent = `${formatarDataSimples(a.dat_alta)}${a.hor_alta ? " " + a.hor_alta : ""}`;
+  document.getElementById("alta-data-alta").textContent = `${formatarDataSimples(a.dat_alta)}${a.hor_alta ? " " + formatarHora(a.hor_alta) : ""}`;
   document.getElementById("alta-numero-prontuario").textContent = a.num_prontuario;
   document.getElementById("alta-destino").textContent = a.dsc_destino || "-";
   document.getElementById("alta-motivo").textContent = a.dsc_motivo_alta || "-";
@@ -312,6 +313,48 @@ function abrirModalRegistrarAlta(isn) {
   form.querySelector('[name="isn_internacao_leito"]').value = a.isn_internacao_leito;
 
   abrirModal("modal-registrar-alta");
+}
+
+async function carregarDevolvidos() {
+  const tbody = document.getElementById("tbody-devolvidos");
+  try {
+    const lista = await apiFetch(`/api/prontuarios?status=sop&aguardando_sop=1`);
+    document.getElementById("total-devolvidos").textContent = lista.length;
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário devolvido aguardando recebimento.</td></tr>`;
+      return;
+    }
+    const ORIGEM = { unidade: "Unidade", contas_medicas: "Contas Médicas" };
+    tbody.innerHTML = lista.map((p) => `
+      <tr>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td><span class="badge badge-media">${esc(ORIGEM[p.devolvido_sop_por] || p.devolvido_sop_por || "-")}</span></td>
+        <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
+        <td>${p.pendencias_abertas > 0
+            ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
+            : `<span class="badge badge-ok">Sem pendência</span>`}</td>
+        <td>${esc(formatarData(p.entrou_sop_em || p.atualizado_em))}</td>
+        <td class="acoes-linha">
+          <button class="btn btn-primario btn-sm" onclick="confirmarRecebimentoSop(${esc(p.id)})">Confirmar Recebimento</button>
+        </td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function confirmarRecebimentoSop(id) {
+  if (!confirm("Confirmar o recebimento deste prontuário devolvido?")) return;
+  try {
+    await apiFetch(`/api/prontuarios/${id}/confirmar-recebimento-sop`, { method: "POST" });
+    carregarDevolvidos();
+    carregarSOP();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function carregarEnviadosUnidade() {
@@ -327,7 +370,7 @@ async function carregarEnviadosUnidade() {
 
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
@@ -357,7 +400,7 @@ async function carregarEnviadosContas() {
 
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${p.pendencias_abertas > 0

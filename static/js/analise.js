@@ -19,8 +19,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("form-nova-pendencia").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    if (!document.getElementById("input-profissional-selecionado").value) {
-      alert("Selecione um profissional cadastrado na lista de resultados.");
+    // Profissional e opcional, mas se algo foi digitado tem que ser escolhido na lista.
+    if (document.getElementById("input-busca-profissional").value.trim()
+        && !document.getElementById("input-profissional-selecionado").value) {
+      alert("Selecione o profissional na lista de resultados ou apague o campo.");
       return;
     }
     const form = ev.target;

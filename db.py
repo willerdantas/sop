@@ -92,17 +92,20 @@ def preparar_banco(dsn, caminho_schema):
         conn.close()
         return f"Erro ao criar as tabelas: {_mensagem_erro(exc)}", acoes
 
-    # Ajustes de seguranca (idempotentes): rodam a cada inicio. Falha aqui nao
-    # derruba a app - ex: usuario do banco sem permissao de ALTER TABLE (caso
-    # do usuario restrito de sql/permissoes.sql, que ja encontra tudo pronto).
-    caminho_seguranca = os.path.join(os.path.dirname(caminho_schema), "seguranca.sql")
+    # Migracoes de estrutura e ajustes de seguranca (idempotentes): rodam a
+    # cada inicio. Falha aqui nao derruba a app - ex: usuario do banco sem
+    # permissao de ALTER TABLE (caso do usuario restrito de
+    # sql/permissoes.sql, que ja encontra tudo pronto).
+    pasta_sql = os.path.dirname(caminho_schema)
     try:
-        with conn.cursor() as cur, open(caminho_seguranca, encoding="utf-8") as arquivo:
-            cur.execute(arquivo.read())
-        conn.commit()
-    except (psycopg2.Error, UnicodeDecodeError, OSError) as exc:
-        conn.rollback()
-        print(f"[aviso] ajustes de seguranca do banco nao aplicados: {_mensagem_erro(exc)}")
+        for nome, rotulo in (("migracoes.sql", "migracoes"), ("seguranca.sql", "ajustes de seguranca")):
+            try:
+                with conn.cursor() as cur, open(os.path.join(pasta_sql, nome), encoding="utf-8") as arquivo:
+                    cur.execute(arquivo.read())
+                conn.commit()
+            except (psycopg2.Error, UnicodeDecodeError, OSError) as exc:
+                conn.rollback()
+                print(f"[aviso] {rotulo} do banco nao aplicados: {_mensagem_erro(exc)}")
     finally:
         conn.close()
     return None, acoes

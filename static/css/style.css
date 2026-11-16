@@ -677,6 +677,8 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
 .badge-ok { background: rgba(15,150,136,0.14); color: var(--cor-teal-var); }
 .badge-critica { background: rgba(235,96,10,0.16); color: var(--cor-laranja); }
 .badge-media { background: rgba(243,161,51,0.18); color: #9a6115; }
+/* Internacao com tempo total de 0 dias */
+.badge-24h { background: #FFE600; color: #D00000; font-weight: 700; }
 .badge-baixa { background: rgba(83,183,217,0.16); color: var(--cor-azul-var); }
 
 .acoes-linha { display: flex; gap: 6px; flex-wrap: wrap; }

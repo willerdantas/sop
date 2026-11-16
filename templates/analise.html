@@ -74,11 +74,11 @@
     </div>
     <div class="info-item">
       <label>Data de Internação</label>
-      <span>{{ prontuario.data_internacao or "-" }}</span>
+      <span>{{ prontuario.data_internacao | data_br }}</span>
     </div>
     <div class="info-item">
       <label>Data de Alta</label>
-      <span>{{ prontuario.data_alta or "-" }}</span>
+      <span>{{ prontuario.data_alta | data_br }}{% if internacao_24h %} <span class="badge badge-24h" title="Internação de menos de um dia">24h</span>{% endif %}</span>
     </div>
     <div class="info-item">
       <label>Localização Física</label>
@@ -133,8 +133,8 @@
           <td>{{ h.dsc_clinica or "-" }}</td>
           <td>{{ h.dsc_enfermaria or "-" }}</td>
           <td>{{ h.dsc_leito or "-" }}</td>
-          <td>{{ h.dat_internacao or "-" }}</td>
-          <td>{{ h.dat_alta or "-" }}</td>
+          <td>{{ h.dat_internacao | data_br }}</td>
+          <td>{{ h.dat_alta | data_br }}</td>
           <td>{{ h.dias_clinica }}</td>
         </tr>
         {% else %}
@@ -192,10 +192,10 @@
           {% for ex in exames %}
           <tr>
             <td>{{ ex.dsc_exame or "-" }}</td>
-            <td>{{ ex.dat_solicitacao or "-" }}</td>
-            <td>{{ ex.dat_agendamento or "-" }}</td>
-            <td>{{ ex.dat_realizacao or "-" }}</td>
-            <td>{{ ex.dat_cancelamento or "-" }}</td>
+            <td>{{ ex.dat_solicitacao | data_br }}</td>
+            <td>{{ ex.dat_agendamento | data_br }}</td>
+            <td>{{ ex.dat_realizacao | data_br }}</td>
+            <td>{{ ex.dat_cancelamento | data_br }}</td>
           </tr>
           {% else %}
           <tr><td colspan="5" class="vazio-estado">Nenhum exame encontrado para esta internação.</td></tr>
@@ -290,8 +290,8 @@
           {% endif %}
         </div>
         <div class="campo">
-          <label>Profissional *</label>
-          <input type="text" id="input-busca-profissional" placeholder="Digite para buscar o profissional cadastrado" autocomplete="off" required>
+          <label>Profissional</label>
+          <input type="text" id="input-busca-profissional" placeholder="Opcional: digite para buscar o profissional" autocomplete="off">
           <input type="hidden" name="profissional" id="input-profissional-selecionado">
           <div id="resultados-profissional" class="texto-suave" style="margin-top:6px; max-height:160px; overflow-y:auto;"></div>
         </div>

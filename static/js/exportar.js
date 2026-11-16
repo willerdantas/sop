@@ -48,7 +48,10 @@ function gerarPDF(cabecalhos, linhas, titulo, nomeArquivo) {
   doc.setFontSize(14);
   doc.text(titulo, 14, 15);
   doc.setFontSize(9);
-  doc.text(new Date().toLocaleString("pt-BR"), 14, 21);
+  const agora = new Date();
+  const dois = (n) => String(n).padStart(2, "0");
+  doc.text(`${dois(agora.getDate())}/${dois(agora.getMonth() + 1)}/${dois(agora.getFullYear() % 100)} `
+    + `${dois(agora.getHours())}:${dois(agora.getMinutes())}`, 14, 21);
   doc.autoTable({
     head: [cabecalhos],
     body: linhas,

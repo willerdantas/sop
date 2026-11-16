@@ -107,6 +107,33 @@
 
 <div class="card-branco">
   <div class="flex-entre">
+    <h3>Prontuários Devolvidos (<span id="total-devolvidos">0</span>)</h3>
+    {{ exportar.botoes('tbody-devolvidos', 'Prontuários Devolvidos', 'prontuarios_devolvidos') }}
+  </div>
+  <p class="texto-suave">Devolvidos pela Unidade ou por Contas Médicas. Confirme o recebimento para o prontuário voltar à lista do SOP.</p>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Devolvido por</th>
+          <th>Unidade</th>
+          <th>Dias desde Alta</th>
+          <th>Pendências</th>
+          <th>Devolvido em</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-devolvidos">
+        <tr><td colspan="8" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <div class="flex-entre">
     <h3>Prontuários no SOP</h3>
     {{ exportar.botoes('tbody-sop', 'Prontuários no SOP', 'prontuarios_no_sop') }}
   </div>

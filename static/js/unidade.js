@@ -55,7 +55,7 @@ function renderizarEnviados(lista) {
 
   tbody.innerHTML = lista.map((p) => `
     <tr>
-      <td><strong>${esc(p.numero_prontuario)}</strong></td>
+      <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
       <td>${esc(p.paciente_nome)}</td>
       <td>${esc(p.unidade_nome || "-")}</td>
       <td>${p.pendencias_abertas > 0
@@ -96,7 +96,7 @@ function renderizarTabela(lista) {
 
   tbody.innerHTML = lista.map((p) => `
     <tr>
-      <td><strong>${esc(p.numero_prontuario)}</strong></td>
+      <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
       <td>${esc(p.paciente_nome)}</td>
       <td>${esc(p.unidade_nome || "-")}</td>
       <td>${p.prioridade === "urgente" ? '<span class="badge badge-pendencia">Urgente</span>' : "Normal"}</td>
@@ -144,7 +144,7 @@ async function carregarPendenciasUnidade() {
 
     tbody.innerHTML = pendentes.map((p) => `
       <tr>
-        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.tipo_descricao || "-")}</td>
         <td>${esc(p.profissional || "-")}</td>

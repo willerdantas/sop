@@ -121,6 +121,57 @@ UNIDADES_PERMITIDAS = (
 )
 
 
+def data_br(valor):
+    """Data no padrao brasileiro: dd/mm/aa para datas e dd/mm/aa hh:mm para
+    data e hora (filtro "data_br" dos templates)."""
+    if valor in (None, ""):
+        return "-"
+    if isinstance(valor, str):
+        texto_data = valor.strip()
+        try:
+            if "T" in texto_data or " " in texto_data:
+                valor = datetime.fromisoformat(texto_data)
+            else:
+                valor = date.fromisoformat(texto_data)
+        except ValueError:
+            return texto_data
+    if isinstance(valor, datetime):
+        return valor.strftime("%d/%m/%y %H:%M")
+    if isinstance(valor, date):
+        return valor.strftime("%d/%m/%y")
+    return str(valor)
+
+
+def primeiras_entradas_internacao(isns_internacao_leito):
+    """{isn_internacao_leito: data do primeiro leito da internacao}. A data
+    gravada no prontuario e a do ultimo leito; o tempo total de internacao
+    conta desde o primeiro. Uma consulta em lote ao sistema hospitalar."""
+    isns = sorted({int(i) for i in isns_internacao_leito if i})
+    if not isns:
+        return {}
+    rows = db.query_integra(
+        """SELECT ref.isn_internacao_leito, MIN(il.dat_internacao) AS primeira_entrada
+           FROM t_internacao_leito ref
+           JOIN t_internacao_leito il ON il.isn_internacao = ref.isn_internacao
+           WHERE ref.isn_internacao_leito = ANY(%s)
+           GROUP BY ref.isn_internacao_leito""",
+        (isns,)
+    )
+    return {int(r["isn_internacao_leito"]): r["primeira_entrada"] for r in rows}
+
+
+def anexar_internacao_total(linhas):
+    """Preenche 'internacao_total_dias' (alta - primeiro leito) nos
+    prontuarios. 0 = internacao de menos de um dia (etiqueta "24h")."""
+    primeiras = primeiras_entradas_internacao(r.get("integra_isn_internacao_leito") for r in linhas)
+    for r in linhas:
+        isn = r.get("integra_isn_internacao_leito")
+        entrada = (primeiras.get(int(isn)) if isn else None) or r.get("data_internacao")
+        alta = r.get("data_alta")
+        r["internacao_total_dias"] = (alta - entrada).days if (alta and entrada) else None
+    return linhas
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -135,6 +186,7 @@ def create_app():
     # register_routes para o bloqueio rodar antes do controle por perfil.
     configuracao_inicial.init_app(app, ao_conectar=_seed_admin)
 
+    app.add_template_filter(data_br, "data_br")
     register_routes(app)
     return app
 
@@ -504,6 +556,8 @@ def listar_altas_pendentes():
                SELECT DISTINCT ON (il.isn_internacao)
                       il.isn_internacao_leito, il.isn_internacao, il.isn_clinica,
                       il.dat_internacao, il.dat_alta, il.hor_alta,
+                      (SELECT MIN(il2.dat_internacao) FROM t_internacao_leito il2
+                         WHERE il2.isn_internacao = il.isn_internacao) AS primeira_entrada,
                       il.isn_destino, d.dsc_destino, ma.dsc_motivo_alta,
                       c.dsc_clinica AS unidade_nome,
                       p.num_prontuario, p.dsc_nome AS paciente_nome
@@ -554,6 +608,9 @@ def listar_altas_pendentes():
             "isn_clinica": int(a["isn_clinica"]) if a["isn_clinica"] is not None else None,
             "unidade_nome": a["unidade_nome"],
             "dat_internacao": a["dat_internacao"],
+            "internacao_total_dias": ((a["dat_alta"] - (a["primeira_entrada"] or a["dat_internacao"])).days
+                                      if a["dat_alta"] and (a["primeira_entrada"] or a["dat_internacao"])
+                                      else None),
             "dat_alta": a["dat_alta"],
             "hor_alta": a["hor_alta"],
             "isn_destino": int(a["isn_destino"]) if a["isn_destino"] is not None else None,
@@ -677,6 +734,7 @@ ENDPOINT_PARA_PAGINAS = {
     "api_registrar_internacao": ("sop",),
     "api_mover_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_unidades_envio_prontuario": ("sop",),
+    "api_confirmar_recebimento_sop": ("sop",),
     "api_confirmar_recebimento_prontuario": ("contas_medicas",),
     "api_editar_valores_faturamento": ("contas_medicas",),
     "api_registrar_analise_auditoria": ("contas_medicas",),
@@ -1055,6 +1113,7 @@ def register_routes(app):
             dsc_mae=dados_paciente["dsc_mae"], num_cpf=dados_paciente["num_cpf"],
             num_cns=dados_paciente["num_cns"], cids=cids,
             dias_enfermaria_calc=dias_enfermaria_calc, dias_uti_calc=dias_uti_calc,
+            internacao_24h=(anexar_internacao_total([dict(prontuario)])[0]["internacao_total_dias"] == 0),
             unidades_pendencia=unidades_pendencia,
             min_data_ocorrencia=min_data_ocorrencia, max_data_ocorrencia=max_data_ocorrencia,
         )
@@ -1126,6 +1185,8 @@ def register_routes(app):
         nome = v.termo_busca(args.get("nome"))
         data_inicio = v.data_iso(args.get("data_inicio"), "data inicial")
         data_fim = v.data_iso(args.get("data_fim"), "data final")
+        # Devolvidos ao SOP aguardando confirmacao: "1" so eles, "0" sem eles.
+        aguardando_sop = args.get("aguardando_sop")
 
         sql = """
             SELECT p.*,
@@ -1152,6 +1213,9 @@ def register_routes(app):
         if status:
             sql += " AND p.status_atual = %s"
             params.append(status)
+        if aguardando_sop in ("0", "1"):
+            sql += " AND p.aguardando_recebimento_sop = %s"
+            params.append(aguardando_sop == "1")
         if busca:
             sql += " AND (p.numero_prontuario ILIKE %s OR p.paciente_nome ILIKE %s)"
             params += [f"%{busca}%", f"%{busca}%"]
@@ -1174,6 +1238,7 @@ def register_routes(app):
 
         rows = db.query(sql, params)
         anexar_unidade_nome(rows)
+        anexar_internacao_total(rows)
 
         agora = agora_local()
         for row in rows:
@@ -1234,6 +1299,8 @@ def register_routes(app):
             return jsonify({"erro": "perfil operador so pode enviar o prontuario para o SOP"}), 403
         if destino not in destinos_permitidos_usuario():
             return jsonify({"erro": "seu perfil nao pode enviar o prontuario para este destino"}), 403
+        if atual["status_atual"] == "sop" and atual.get("aguardando_recebimento_sop"):
+            return jsonify({"erro": "confirme o recebimento do prontuario devolvido antes de movimenta-lo"}), 409
 
         # Regra de negocio: so pode ir para "contas_medicas" ou alem quando nao
         # houver pendencia cadastrada, ou todas estiverem confirmadas pelo SOP
@@ -1272,6 +1339,15 @@ def register_routes(app):
             db.execute(
                 "UPDATE prontuarios SET status_atual = %s, unidade_id = %s, recebido_unidade_em = NULL WHERE id = %s",
                 (destino, unidade_envio, prontuario_id)
+            )
+        elif destino == "sop" and atual["status_atual"] in ("unidade", "contas_medicas"):
+            # Devolvido ao SOP pela Unidade ou por Contas Medicas: fica em
+            # "Prontuarios Devolvidos" ate o SOP confirmar o recebimento.
+            db.execute(
+                """UPDATE prontuarios SET status_atual = %s, aguardando_recebimento_sop = TRUE,
+                       devolvido_sop_por = %s, recebido_sop_em = NULL, recebido_sop_usuario_id = NULL
+                   WHERE id = %s""",
+                (destino, atual["status_atual"], prontuario_id)
             )
         else:
             db.execute(
@@ -1361,6 +1437,25 @@ def register_routes(app):
         db.execute(
             "UPDATE prontuarios SET recebido_unidade_em = NOW() WHERE id = %s",
             (prontuario_id,)
+        )
+        atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
+        return jsonify(atualizado)
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento-sop", methods=["POST"])
+    @login_required
+    def api_confirmar_recebimento_sop(prontuario_id):
+        """SOP confirma que recebeu um prontuario devolvido pela Unidade ou por
+        Contas Medicas; a partir dai ele volta a lista "Prontuarios no SOP"."""
+        atual, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
+        if atual["status_atual"] != "sop" or not atual.get("aguardando_recebimento_sop"):
+            return jsonify({"erro": "prontuario nao esta aguardando recebimento no SOP"}), 409
+        db.execute(
+            """UPDATE prontuarios SET aguardando_recebimento_sop = FALSE, recebido_sop_em = NOW(),
+                   recebido_sop_usuario_id = %s
+               WHERE id = %s""",
+            (session["usuario_id"], prontuario_id)
         )
         atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
         return jsonify(atualizado)
@@ -1653,13 +1748,14 @@ def register_routes(app):
 
         if not prontuario_id or not descricao:
             return jsonify({"erro": "prontuario_id e descricao sao obrigatorios"}), 400
-        if not profissional or not unidade_id or not data_ocorrencia:
-            return jsonify({"erro": "profissional, unidade_id e data_ocorrencia sao obrigatorios"}), 400
+        if not unidade_id or not data_ocorrencia:
+            return jsonify({"erro": "unidade_id e data_ocorrencia sao obrigatorios"}), 400
         if tipo_pendencia_id and not db.query(
             "SELECT 1 FROM tipos_pendencia WHERE id = %s AND ativo = TRUE", (tipo_pendencia_id,), fetchone=True
         ):
             return jsonify({"erro": "tipo de pendencia invalido"}), 400
-        if not db.query_integra(
+        # Profissional e opcional; se informado, tem que existir no sistema hospitalar.
+        if profissional and not db.query_integra(
             "SELECT 1 FROM t_profissional WHERE TRIM(dsc_usuario) = %s LIMIT 1", (profissional,), fetchone=True
         ):
             return jsonify({"erro": "profissional nao encontrado no sistema hospitalar"}), 400

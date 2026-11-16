@@ -53,7 +53,7 @@ async function carregarAguardando() {
 
     tbody.innerHTML = aguardando.map((p) => `
       <tr>
-        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${p.pendencias_abertas > 0
@@ -96,7 +96,7 @@ async function carregarContas() {
 
     tbody.innerHTML = confirmados.map((p) => `
       <tr>
-        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${p.pendencias_abertas > 0
@@ -139,7 +139,7 @@ async function carregarFaturamento() {
 
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
@@ -184,7 +184,7 @@ async function carregarFaturados() {
 
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
@@ -234,7 +234,7 @@ async function carregarAuditoria() {
 
     tbody.innerHTML = lista.map((p) => `
       <tr>
-        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>

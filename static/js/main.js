@@ -175,17 +175,33 @@ function formatarData(isoString) {
   // sem na verdade converter nada. Aqui forcamos a leitura de volta em UTC
   // para recuperar exatamente a hora local gravada no banco, sem aplicar o
   // fuso do navegador por cima (o que deslocaria a hora de novo).
-  return d.toLocaleString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-    timeZone: "UTC",
-  });
+  if (isNaN(d)) return "-";
+  return `${formatarDataSimples(isoString)} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
+/** Data no padrao brasileiro dd/mm/aa (lida em UTC, ver formatarData). */
 function formatarDataSimples(dateString) {
   if (!dateString) return "-";
   const d = new Date(dateString);
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+  if (isNaN(d)) return "-";
+  const dois = (n) => String(n).padStart(2, "0");
+  return `${dois(d.getUTCDate())}/${dois(d.getUTCMonth() + 1)}/${dois(d.getUTCFullYear() % 100)}`;
+}
+
+/** Hora hh:mm a partir de "14:30", "14:30:00" etc. */
+function formatarHora(hora) {
+  if (!hora) return "";
+  const partes = String(hora).trim().split(":");
+  if (partes.length < 2) return String(hora).trim();
+  return `${partes[0].padStart(2, "0")}:${partes[1].padStart(2, "0")}`;
+}
+
+/** Etiqueta "24h" (fundo amarelo, letra vermelha) para internacao com
+ * tempo total de 0 dias (entrada e alta no mesmo dia). */
+function etiqueta24h(diasInternacao) {
+  return diasInternacao === 0
+    ? ` <span class="badge badge-24h" title="Internação de menos de um dia">24h</span>`
+    : "";
 }
 
 /**
