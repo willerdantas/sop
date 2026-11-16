@@ -162,18 +162,8 @@ function renderizarTabela(lista) {
   `).join("");
 }
 
-async function enviarParaUnidade(id) {
-  if (!confirm("Confirmar envio deste prontuário de volta para a Unidade?")) return;
-
-  try {
-    await apiFetch(`/api/prontuarios/${id}/mover`, {
-      method: "POST",
-      body: JSON.stringify({ destino: "unidade", observacao: "Enviado pelo SOP para a Unidade" }),
-    });
-    carregarSOP();
-  } catch (e) {
-    alert(e.message);
-  }
+function enviarParaUnidade(id) {
+  enviarProntuarioParaUnidade(id, carregarSOP);
 }
 
 async function enviarParaContasMedicas(id, pendenciasAbertas) {

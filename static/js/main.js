@@ -324,3 +324,90 @@ function limparBuscaProfissional() {
   document.getElementById("input-profissional-selecionado").value = "";
   document.getElementById("resultados-profissional").innerHTML = "";
 }
+
+/* ---------------------------------------------------------
+ * ENVIO PARA A UNIDADE (SOP e Analise)
+ * Abre um modal para escolher a unidade de destino: unidades do
+ * historico de internacao do prontuario + unidades locais cadastradas.
+ * aoConcluir() roda depois do envio com sucesso.
+ * --------------------------------------------------------- */
+async function enviarProntuarioParaUnidade(prontuarioId, aoConcluir) {
+  let dados;
+  try {
+    dados = await apiFetch(`/api/prontuarios/${encodeURIComponent(prontuarioId)}/unidades-envio`);
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
+  if (!dados.unidades.length) {
+    alert("Nenhuma unidade disponível para este prontuário. Cadastre a unidade em Unidades.");
+    return;
+  }
+
+  let modal = document.getElementById("modal-enviar-unidade");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.className = "modal-fundo";
+    modal.id = "modal-enviar-unidade";
+    modal.innerHTML = `
+      <div class="modal-caixa">
+        <h3>Enviar para a Unidade</h3>
+        <form id="form-enviar-unidade">
+          <div class="campo">
+            <label for="select-unidade-envio">Unidade de destino *</label>
+            <select id="select-unidade-envio" required></select>
+            <small class="texto-suave">Unidades do histórico de internação do prontuário e unidades cadastradas no sistema.</small>
+          </div>
+          <div class="campo">
+            <label for="obs-unidade-envio">Observação</label>
+            <textarea id="obs-unidade-envio" rows="2" maxlength="1000"></textarea>
+          </div>
+          <div class="form-acoes">
+            <button type="button" class="btn btn-ghost" id="btn-cancelar-envio-unidade">Cancelar</button>
+            <button type="submit" class="btn btn-primario">Enviar</button>
+          </div>
+        </form>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (ev) => { if (ev.target === modal) fecharModal(modal.id); });
+    document.getElementById("btn-cancelar-envio-unidade").addEventListener("click", () => fecharModal(modal.id));
+  }
+
+  const select = document.getElementById("select-unidade-envio");
+  const placeholder = `<option value="">Selecione</option>`;
+  select.innerHTML = placeholder + dados.unidades.map((u) =>
+    `<option value="${esc(u.id)}" ${u.id === dados.atual ? "selected" : ""}>${esc(u.nome)}${u.id < 0 ? " (cadastrada no sistema)" : ""}</option>`
+  ).join("");
+  document.getElementById("obs-unidade-envio").value = "";
+
+  // Recria o form para nao acumular handlers de envios anteriores.
+  const formAntigo = document.getElementById("form-enviar-unidade");
+  const form = formAntigo.cloneNode(true);
+  formAntigo.replaceWith(form);
+  form.querySelector("#select-unidade-envio").value = select.value;
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const unidadeId = form.querySelector("#select-unidade-envio").value;
+    if (!unidadeId) return;
+    const botao = form.querySelector('button[type="submit"]');
+    botao.disabled = true;
+    try {
+      await apiFetch(`/api/prontuarios/${encodeURIComponent(prontuarioId)}/mover`, {
+        method: "POST",
+        body: JSON.stringify({
+          destino: "unidade",
+          unidade_id: Number(unidadeId),
+          observacao: form.querySelector("#obs-unidade-envio").value.trim(),
+        }),
+      });
+      fecharModal("modal-enviar-unidade");
+      if (aoConcluir) aoConcluir();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      botao.disabled = false;
+    }
+  });
+  form.querySelector("#btn-cancelar-envio-unidade").addEventListener("click", () => fecharModal("modal-enviar-unidade"));
+  abrirModal("modal-enviar-unidade");
+}

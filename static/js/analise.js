@@ -61,18 +61,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const btnEnviarUnidade = document.getElementById("btn-enviar-unidade");
   if (btnEnviarUnidade) {
-    btnEnviarUnidade.addEventListener("click", async () => {
-      if (!confirm("Confirmar envio deste prontuário de volta para a Unidade?")) return;
-
-      try {
-        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
-          method: "POST",
-          body: JSON.stringify({ destino: "unidade", observacao: "Enviado pelo SOP para a Unidade" }),
-        });
-        window.location.href = "/sop";
-      } catch (e) {
-        alert(e.message);
-      }
+    btnEnviarUnidade.addEventListener("click", () => {
+      enviarProntuarioParaUnidade(PRONTUARIO_ID, () => { window.location.href = "/sop"; });
     });
   }
 

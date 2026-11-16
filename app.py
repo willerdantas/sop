@@ -214,6 +214,24 @@ def listar_unidades_locais_opcoes():
     return [{"id": -r["id"], "nome": r["nome"]} for r in rows]
 
 
+def unidades_do_prontuario(prontuario, historico_leitos):
+    """Unidades a que o prontuario pode ser associado (envio para a unidade,
+    registro de pendencia): as clinicas do historico de internacao, a unidade
+    atual do prontuario e as unidades locais ativas (id negativo)."""
+    opcoes, vistas = [], set()
+    for h in historico_leitos or []:
+        if h.get("isn_clinica") is not None and int(h["isn_clinica"]) not in vistas:
+            vistas.add(int(h["isn_clinica"]))
+            opcoes.append({"id": int(h["isn_clinica"]), "nome": h["dsc_clinica"]})
+    atual = prontuario.get("unidade_id")
+    if atual is not None and int(atual) > 0 and int(atual) not in vistas:
+        nome = mapa_nomes_unidades([atual]).get(int(atual))
+        if nome:
+            vistas.add(int(atual))
+            opcoes.append({"id": int(atual), "nome": nome})
+    return opcoes + listar_unidades_locais_opcoes()
+
+
 def mapa_nomes_unidades(ids):
     """Recebe uma lista de unidade_id e devolve {id: nome}. IDs positivos sao
     isn_clinica do sistema hospitalar (t_clinica); IDs negativos
@@ -571,6 +589,8 @@ def validar_pendencia_contra_historico(prontuario, unidade_id, data_ocorrencia):
 
     if unidade_id:
         clinicas_validas = {int(h["isn_clinica"]) for h in historico if h.get("isn_clinica") is not None}
+        if prontuario.get("unidade_id") is not None:
+            clinicas_validas.add(int(prontuario["unidade_id"]))  # unidade atual (ver unidades_do_prontuario)
         if unidade_id not in clinicas_validas:
             return "Unidade informada nao pertence ao historico de internacao deste prontuario."
 
@@ -656,6 +676,7 @@ ENDPOINT_PARA_PAGINAS = {
     "api_buscar_internacoes_prontuario": ("sop",),
     "api_registrar_internacao": ("sop",),
     "api_mover_prontuario": ("sop", "unidade", "contas_medicas"),
+    "api_unidades_envio_prontuario": ("sop",),
     "api_confirmar_recebimento_prontuario": ("contas_medicas",),
     "api_editar_valores_faturamento": ("contas_medicas",),
     "api_registrar_analise_auditoria": ("contas_medicas",),
@@ -1010,13 +1031,7 @@ def register_routes(app):
         exames = listar_exames_internacao(isn_internacao)
         resumo_exames = resumir_exames_por_classificacao(exames)
 
-        unidades_pendencia = []
-        vistas = set()
-        for h in historico_leitos:
-            if h["isn_clinica"] is not None and h["isn_clinica"] not in vistas:
-                vistas.add(h["isn_clinica"])
-                unidades_pendencia.append({"id": int(h["isn_clinica"]), "nome": h["dsc_clinica"]})
-        unidades_pendencia += listar_unidades_locais_opcoes()
+        unidades_pendencia = unidades_do_prontuario(prontuario, historico_leitos)
 
         min_data_ocorrencia = None
         max_data_ocorrencia = None
@@ -1224,6 +1239,18 @@ def register_routes(app):
                     "pendencias_abertas": abertas["total"]
                 }), 409
 
+        unidade_envio = None
+        if destino == "unidade":
+            # O SOP escolhe para qual unidade o prontuario volta: uma das
+            # unidades do historico de internacao/atual ou uma unidade local.
+            unidade_envio = v.inteiro(data.get("unidade_id"), "unidade de destino", obrigatorio=True)
+            _, historico = historico_internacao(atual.get("integra_isn_internacao_leito"))
+            opcoes = {u["id"]: u["nome"] for u in unidades_do_prontuario(atual, historico)}
+            if unidade_envio not in opcoes:
+                return jsonify({"erro": "unidade de destino nao pertence a este prontuario"}), 400
+            observacao = (f"Enviado para a unidade {opcoes[unidade_envio]}"
+                          + (f" - {observacao}" if observacao else ""))[:2000]
+
         if destino == "contas_medicas":
             # Toda nova chegada em contas_medicas exige nova confirmacao de entrega.
             db.execute(
@@ -1233,8 +1260,8 @@ def register_routes(app):
         elif destino == "unidade":
             # Toda nova chegada na unidade (vinda do SOP) exige nova confirmacao de entrega.
             db.execute(
-                "UPDATE prontuarios SET status_atual = %s, recebido_unidade_em = NULL WHERE id = %s",
-                (destino, prontuario_id)
+                "UPDATE prontuarios SET status_atual = %s, unidade_id = %s, recebido_unidade_em = NULL WHERE id = %s",
+                (destino, unidade_envio, prontuario_id)
             )
         else:
             db.execute(
@@ -1249,6 +1276,17 @@ def register_routes(app):
         encerrar_analises_abertas(prontuario_id)
         atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
         return jsonify(atualizado)
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/unidades-envio", methods=["GET"])
+    @login_required
+    def api_unidades_envio_prontuario(prontuario_id):
+        """Opcoes de unidade para "Enviar p/ Unidade" (ver unidades_do_prontuario)."""
+        atual, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
+        _, historico = historico_internacao(atual.get("integra_isn_internacao_leito"))
+        return jsonify({"atual": atual.get("unidade_id"),
+                        "unidades": unidades_do_prontuario(atual, historico)})
 
     @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento", methods=["POST"])
     @login_required
