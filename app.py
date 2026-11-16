@@ -187,6 +187,26 @@ def listar_unidades_integra():
     return [{"id": int(r["isn_clinica"]), "nome": r["dsc_clinica"]} for r in rows]
 
 
+def listar_profissionais_integra():
+    """Profissionais do sistema hospitalar (t_profissional), com o conselho
+    (t_conselho.cod_conselho), consultados ao vivo."""
+    rows = db.query_integra(
+        """SELECT p.isn_usuario, TRIM(p.dsc_usuario) AS nome, TRIM(p.num_conselho::text) AS num_conselho,
+                  TRIM(c.cod_conselho::text) AS conselho
+           FROM t_profissional p
+           LEFT JOIN t_conselho c ON c.isn_conselho = p.isn_conselho
+           WHERE COALESCE(TRIM(p.dsc_usuario), '') <> ''
+           ORDER BY 2"""
+    )
+    return [{"isn_profissional": r["isn_usuario"], "nome": r["nome"],
+             "conselho": r["conselho"], "numero_conselho": r["num_conselho"]} for r in rows]
+
+
+def nomes_profissionais_integra():
+    """Nomes distintos dos profissionais (busca no registro de pendencias)."""
+    return sorted({p["nome"] for p in listar_profissionais_integra()})
+
+
 def listar_unidades_locais_opcoes():
     """Unidades cadastradas localmente (tabela 'unidades'), com id negativo
     para nao colidir com isn_clinica do sistema hospitalar."""
@@ -1011,7 +1031,7 @@ def register_routes(app):
         cids = listar_cids_internacao(isn_internacao)
 
         tipos = db.query("SELECT id, descricao, criticidade FROM tipos_pendencia WHERE ativo = TRUE ORDER BY descricao")
-        profissionais = db.query("SELECT nome FROM profissionais WHERE ativo = TRUE ORDER BY nome")
+        profissionais = [{"nome": n} for n in nomes_profissionais_integra()]
         return dict(
             prontuario=prontuario, tipos=tipos, profissionais=profissionais,
             isn_internacao=isn_internacao, historico_leitos=historico_leitos,
@@ -1591,8 +1611,10 @@ def register_routes(app):
             "SELECT 1 FROM tipos_pendencia WHERE id = %s AND ativo = TRUE", (tipo_pendencia_id,), fetchone=True
         ):
             return jsonify({"erro": "tipo de pendencia invalido"}), 400
-        if not db.query("SELECT 1 FROM profissionais WHERE nome = %s AND ativo = TRUE", (profissional,), fetchone=True):
-            return jsonify({"erro": "profissional nao cadastrado"}), 400
+        if not db.query_integra(
+            "SELECT 1 FROM t_profissional WHERE TRIM(dsc_usuario) = %s LIMIT 1", (profissional,), fetchone=True
+        ):
+            return jsonify({"erro": "profissional nao encontrado no sistema hospitalar"}), 400
 
         prontuario_row, erro = obter_prontuario_autorizado(prontuario_id)
         if erro:
@@ -1800,65 +1822,12 @@ def register_routes(app):
         return jsonify(atualizado)
 
     # -----------------------------------------------------------
-    # API - PROFISSIONAIS (CRUD)
+    # API - PROFISSIONAIS (somente leitura, do sistema hospitalar)
     # -----------------------------------------------------------
     @app.route("/api/profissionais", methods=["GET"])
     @login_required
     def api_listar_profissionais():
-        rows = db.query("SELECT * FROM profissionais ORDER BY nome")
-        return jsonify(decifrar_campos(rows, "telefone", "email"))
-
-    def campos_profissional(data):
-        """Valida o corpo de criar/editar profissional. Telefone e e-mail
-        (dados pessoais) sao gravados cifrados."""
-        uf = v.texto(data.get("uf_conselho"), "UF do conselho", 2)
-        return (
-            v.texto(data.get("nome"), "nome", 150, obrigatorio=True),
-            v.texto(data.get("categoria"), "categoria", 60, obrigatorio=True),
-            v.texto(data.get("conselho"), "conselho", 20),
-            v.texto(data.get("numero_conselho"), "numero do conselho", 30),
-            v.escolha(uf.upper() if uf else None, "UF do conselho", UFS),
-            cifrar_campo(v.texto(data.get("telefone"), "telefone", 20)),
-            cifrar_campo(v.email(data.get("email"))),
-            v.inteiro(data.get("isn_profissional"), "isn_profissional", minimo=1),
-            v.texto(data.get("cbo"), "CBO", 20),
-        )
-
-    @app.route("/api/profissionais", methods=["POST"])
-    @login_required
-    @perfil_required("admin")
-    def api_criar_profissional():
-        novo = db.execute(
-            """INSERT INTO profissionais
-                (nome, categoria, conselho, numero_conselho, uf_conselho, telefone, email,
-                 isn_profissional, cbo)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
-            campos_profissional(v.corpo_json())
-        )
-        return jsonify(decifrar_campos(novo, "telefone", "email")), 201
-
-    @app.route("/api/profissionais/<int:profissional_id>", methods=["PUT"])
-    @login_required
-    @perfil_required("admin")
-    def api_editar_profissional(profissional_id):
-        data = v.corpo_json()
-        atualizado = db.execute(
-            """UPDATE profissionais
-               SET nome=%s, categoria=%s, conselho=%s, numero_conselho=%s,
-                   uf_conselho=%s, telefone=%s, email=%s, isn_profissional=%s, cbo=%s, ativo=%s
-               WHERE id=%s RETURNING *""",
-            campos_profissional(data) + (v.booleano(data.get("ativo"), "ativo", True), profissional_id)
-        )
-        if not atualizado:
-            return jsonify({"erro": "profissional nao encontrado"}), 404
-        return jsonify(decifrar_campos(atualizado, "telefone", "email"))
-
-    @app.route("/api/profissionais/<int:profissional_id>", methods=["DELETE"])
-    @login_required
-    @perfil_required("admin")
-    def api_excluir_profissional(profissional_id):
-        db.execute("UPDATE profissionais SET ativo = FALSE WHERE id = %s", (profissional_id,))
-        return jsonify({"ok": True})
+        return jsonify(listar_profissionais_integra())
 
     # -----------------------------------------------------------
     # API - PROCEDIMENTOS SIGTAP (catalogo, CRUD)

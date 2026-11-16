@@ -289,20 +289,25 @@ function configurarBuscaProfissional() {
 
   inputBusca.addEventListener("input", () => {
     inputSelecionado.value = "";
-    const valor = inputBusca.value.trim().toLowerCase();
+    // Sem acento e sem diferenciar maiusculas; a lista vem do sistema
+    // hospitalar e pode ter milhares de nomes, entao mostra so os primeiros.
+    const semAcento = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const valor = semAcento(inputBusca.value.trim());
     if (!valor) {
       resultados.innerHTML = "";
       return;
     }
-    const encontrados = PROFISSIONAIS_CADASTRADOS.filter((nome) => nome.toLowerCase().includes(valor));
+    const encontrados = PROFISSIONAIS_CADASTRADOS.filter((nome) => semAcento(nome).includes(valor));
     if (!encontrados.length) {
       resultados.innerHTML = `<div>Nenhum profissional encontrado.</div>`;
       return;
     }
-    resultados.innerHTML = encontrados.map((nome) => `
+    const MAXIMO = 30;
+    resultados.innerHTML = encontrados.slice(0, MAXIMO).map((nome) => `
       <div style="padding:6px 0; cursor:pointer; border-bottom:1px solid var(--cor-borda);"
            onclick="selecionarProfissional(${argJs(nome)})">${esc(nome)}</div>
-    `).join("");
+    `).join("") + (encontrados.length > MAXIMO
+      ? `<div>Mais ${encontrados.length - MAXIMO} resultado(s): continue digitando para refinar.</div>` : "");
   });
 }
 

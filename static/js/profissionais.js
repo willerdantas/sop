@@ -1,88 +1,52 @@
 /**
- * profissionais.js - CRUD simples de profissionais
+ * profissionais.js - consulta dos profissionais do sistema hospitalar
+ * (t_profissional), somente leitura, com busca local.
  */
+
+const LIMITE_LINHAS = 500;
+let PROFISSIONAIS = [];
 
 document.addEventListener("DOMContentLoaded", () => {
   carregar();
-
-  document.getElementById("btn-novo-profissional").addEventListener("click", () => {
-    document.getElementById("form-profissional").reset();
-    document.getElementById("form-profissional").querySelector('[name="id"]').value = "";
-    document.getElementById("titulo-modal-profissional").textContent = "Novo Profissional";
-    abrirModal("modal-profissional");
-  });
-
-  document.getElementById("form-profissional").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    const form = ev.target;
-    const dados = Object.fromEntries(new FormData(form).entries());
-    const id = dados.id;
-    delete dados.id;
-    dados.ativo = true;
-    if (dados.uf_conselho) dados.uf_conselho = dados.uf_conselho.toUpperCase();
-
-    try {
-      if (id) {
-        await apiFetch(`/api/profissionais/${id}`, { method: "PUT", body: JSON.stringify(dados) });
-      } else {
-        await apiFetch("/api/profissionais", { method: "POST", body: JSON.stringify(dados) });
-      }
-      fecharModal("modal-profissional");
-      carregar();
-    } catch (e) {
-      alert(e.message);
-    }
-  });
+  document.getElementById("busca-profissional").addEventListener("input", renderizar);
 });
 
 async function carregar() {
   const tbody = document.getElementById("tbody-profissionais");
   try {
-    const lista = await apiFetch("/api/profissionais");
-    if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhum profissional cadastrado.</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = lista.map((p) => `
-      <tr>
-        <td><strong>${esc(p.nome)}</strong></td>
-        <td>${esc(p.categoria)}</td>
-        <td>${p.conselho ? esc(`${p.conselho} ${p.numero_conselho || ""}${p.uf_conselho ? "/" + p.uf_conselho : ""}`) : "-"}</td>
-        <td>${esc([p.telefone, p.email].filter(Boolean).join(" · ")) || "-"}</td>
-        <td>${p.ativo ? '<span class="badge badge-ok">Ativo</span>' : '<span class="badge badge-pendencia">Inativo</span>'}</td>
-        <td class="acoes-linha">
-          <button class="btn btn-outline btn-sm" onclick='editarProfissional(${argJs(p)})'>Editar</button>
-          <button class="btn btn-perigo btn-sm" onclick="excluirProfissional(${esc(p.id)})">Desativar</button>
-        </td>
-      </tr>
-    `).join("");
+    PROFISSIONAIS = await apiFetch("/api/profissionais");
+    renderizar();
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
-function editarProfissional(profissional) {
-  const form = document.getElementById("form-profissional");
-  form.querySelector('[name="id"]').value = profissional.id;
-  form.querySelector('[name="nome"]').value = profissional.nome || "";
-  form.querySelector('[name="categoria"]').value = profissional.categoria || "";
-  form.querySelector('[name="conselho"]').value = profissional.conselho || "";
-  form.querySelector('[name="numero_conselho"]').value = profissional.numero_conselho || "";
-  form.querySelector('[name="uf_conselho"]').value = profissional.uf_conselho || "";
-  form.querySelector('[name="telefone"]').value = profissional.telefone || "";
-  form.querySelector('[name="email"]').value = profissional.email || "";
-  form.querySelector('[name="isn_profissional"]').value = profissional.isn_profissional || "";
-  form.querySelector('[name="cbo"]').value = profissional.cbo || "";
-  document.getElementById("titulo-modal-profissional").textContent = "Editar Profissional";
-  abrirModal("modal-profissional");
+function normalizar(texto) {
+  return String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-async function excluirProfissional(id) {
-  if (!confirm("Desativar este profissional?")) return;
-  try {
-    await apiFetch(`/api/profissionais/${id}`, { method: "DELETE" });
-    carregar();
-  } catch (e) {
-    alert(e.message);
+function renderizar() {
+  const tbody = document.getElementById("tbody-profissionais");
+  const termo = normalizar(document.getElementById("busca-profissional").value.trim());
+  const filtrados = termo
+    ? PROFISSIONAIS.filter((p) => normalizar(`${p.nome} ${p.conselho || ""} ${p.numero_conselho || ""}`).includes(termo))
+    : PROFISSIONAIS;
+  document.getElementById("total-profissionais").textContent = filtrados.length;
+
+  if (!filtrados.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="vazio-estado">Nenhum profissional encontrado.</td></tr>`;
+    return;
   }
+  const linhas = filtrados.slice(0, LIMITE_LINHAS).map((p) => `
+    <tr>
+      <td>${esc(p.isn_profissional ?? "-")}</td>
+      <td><strong>${esc(p.nome)}</strong></td>
+      <td>${esc(p.conselho || "-")}</td>
+      <td>${esc(p.numero_conselho || "-")}</td>
+    </tr>
+  `).join("");
+  const aviso = filtrados.length > LIMITE_LINHAS
+    ? `<tr><td colspan="4" class="vazio-estado">Mostrando ${LIMITE_LINHAS} de ${filtrados.length}. Use a busca para refinar.</td></tr>`
+    : "";
+  tbody.innerHTML = linhas + aviso;
 }
