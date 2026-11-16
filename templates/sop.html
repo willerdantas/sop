@@ -135,6 +135,32 @@
 
 <div class="card-branco">
   <div class="flex-entre">
+    <h3>Prontuários Enviados para a Unidade</h3>
+    {{ exportar.botoes('tbody-enviados-unidade', 'Prontuários Enviados para a Unidade', 'enviados_unidade') }}
+  </div>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade</th>
+          <th>Dias desde Alta</th>
+          <th>Tempo na Unidade</th>
+          <th>Recebimento</th>
+          <th>Pendências</th>
+          <th>Enviado em</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-enviados-unidade">
+        <tr><td colspan="8" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-branco">
+  <div class="flex-entre">
     <h3>Prontuários Enviados para Contas Médicas</h3>
     {{ exportar.botoes('tbody-enviados-contas', 'Prontuários Enviados para Contas Médicas', 'enviados_contas_medicas') }}
   </div>

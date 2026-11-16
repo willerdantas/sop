@@ -10,6 +10,7 @@ let altasPaginaAtual = 1;
 document.addEventListener("DOMContentLoaded", () => {
   carregarSOP();
   carregarAltas(1);
+  carregarEnviadosUnidade();
   carregarEnviadosContas();
 
   document.getElementById("btn-altas-anterior").addEventListener("click", () => carregarAltas(altasPaginaAtual - 1));
@@ -163,7 +164,7 @@ function renderizarTabela(lista) {
 }
 
 function enviarParaUnidade(id) {
-  enviarProntuarioParaUnidade(id, carregarSOP);
+  enviarProntuarioParaUnidade(id, () => { carregarSOP(); carregarEnviadosUnidade(); });
 }
 
 async function enviarParaContasMedicas(id, pendenciasAbertas) {
@@ -311,6 +312,38 @@ function abrirModalRegistrarAlta(isn) {
   form.querySelector('[name="isn_internacao_leito"]').value = a.isn_internacao_leito;
 
   abrirModal("modal-registrar-alta");
+}
+
+async function carregarEnviadosUnidade() {
+  const tbody = document.getElementById("tbody-enviados-unidade");
+  try {
+    const lista = await apiFetch(`/api/prontuarios?status=unidade`);
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário enviado para a Unidade.</td></tr>`;
+      return;
+    }
+    // Quem esta ha mais tempo na unidade aparece primeiro.
+    lista.sort((a, b) => (b.horas_uteis_desde_envio_unidade ?? -1) - (a.horas_uteis_desde_envio_unidade ?? -1));
+
+    tbody.innerHTML = lista.map((p) => `
+      <tr>
+        <td><strong>${esc(p.numero_prontuario)}</strong></td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
+        <td>${formatarTimerHorasUteis(p.horas_uteis_desde_envio_unidade)}</td>
+        <td>${p.recebido_unidade_em
+            ? `<span class="badge badge-ok">Recebido ${esc(formatarData(p.recebido_unidade_em))}</span>`
+            : `<span class="badge badge-media">Aguardando confirmação</span>`}</td>
+        <td>${p.pendencias_abertas > 0
+            ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
+            : `<span class="badge badge-ok">Sem pendência</span>`}</td>
+        <td>${esc(formatarData(p.enviado_unidade_em || p.atualizado_em))}</td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+  }
 }
 
 async function carregarEnviadosContas() {

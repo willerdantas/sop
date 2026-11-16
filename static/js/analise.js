@@ -121,7 +121,7 @@ async function carregarPendencias() {
         <td>${badgeStatusPendencia(p.status)}</td>
         <td>${esc(formatarData(p.data_abertura))}</td>
         <td>${formatarTimerHorasUteis(p.horas_uteis_desde_abertura)}</td>
-        <td class="acoes-linha">${esc(acoesPendencia(p))}</td>
+        <td class="acoes-linha">${acoesPendencia(p)}</td>
       </tr>
     `).join("");
   } catch (e) {

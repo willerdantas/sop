@@ -1133,6 +1133,8 @@ def register_routes(app):
                     WHERE pe.prontuario_id = p.id AND pe.status != 'confirmada') AS pendencias_abertas,
                 (SELECT MAX(m.data_movimentacao) FROM movimentacoes m
                     WHERE m.prontuario_id = p.id AND m.destino = 'sop') AS entrou_sop_em,
+                (SELECT MAX(m.data_movimentacao) FROM movimentacoes m
+                    WHERE m.prontuario_id = p.id AND m.destino = 'unidade') AS enviado_unidade_em,
                 (SELECT nome FROM usuarios WHERE id = p.recebido_contas_medicas_usuario_id)
                     AS recebido_contas_medicas_usuario_nome,
                 (SELECT u.nome FROM movimentacoes m JOIN usuarios u ON u.id = m.usuario_id
@@ -1184,6 +1186,14 @@ def register_routes(app):
                 row["horas_uteis_na_unidade"] = round(horas_uteis_decorridas(row["recebido_unidade_em"], agora), 2)
             else:
                 row["horas_uteis_na_unidade"] = None
+
+            # Tempo na unidade contado desde o envio (inclui a espera pela
+            # confirmacao de recebimento) - usado na lista do SOP.
+            if row["status_atual"] == "unidade" and row["enviado_unidade_em"]:
+                row["horas_uteis_desde_envio_unidade"] = round(
+                    horas_uteis_decorridas(row["enviado_unidade_em"], agora), 2)
+            else:
+                row["horas_uteis_desde_envio_unidade"] = None
 
             row["dias_desde_alta"] = (agora.date() - row["data_alta"]).days if row["data_alta"] else None
 
