@@ -37,7 +37,12 @@ TABELAS_INTEGRA_OPCIONAIS = (
 # Consulta ao sistema hospitalar mais demorada que isto e cancelada pelo
 # proprio Postgres: a tela mostra um erro em vez de a conexao cair (o
 # gunicorn derruba requisicoes que passam do seu --timeout).
-INTEGRA_TIMEOUT_MS = 60000
+# 150s e paliativo: a consulta de Altas falta indice em t_internacao_leito
+# (dat_alta/isn_clinica/isn_destino) no banco do hospital e por isso
+# excede os 60s originais - ver recomendacao de CREATE INDEX enviada para
+# quem administra o ISIVITA. Quando o indice for criado la, isto pode
+# voltar a 60000.
+INTEGRA_TIMEOUT_MS = 150000
 
 _pool = None
 _pool_integra = None

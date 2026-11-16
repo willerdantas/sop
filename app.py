@@ -293,6 +293,20 @@ def resposta_tabela_indisponivel(recurso, exc):
                             "ou sem permissao de leitura (ver sql/permissoes.sql)."}), 503
 
 
+# Consulta ao sistema hospitalar demorou demais (statement_timeout) ou a
+# conexao falhou: erro transitorio, diferente de tabela/permissao ausente.
+ERROS_INTEGRA_LENTO = (psycopg2.errors.QueryCanceled, psycopg2.OperationalError)
+
+
+def resposta_consulta_lenta(recurso, exc):
+    """503 quando a consulta ao sistema hospitalar excedeu o tempo limite ou a
+    conexao falhou - diferente de tabela/permissao ausente (ver ERROS_TABELA_OPCIONAL)."""
+    print(f"[aviso] {recurso} indisponivel (consulta lenta ao sistema hospitalar): "
+          f"{getattr(exc, 'pgerror', None) or exc}".strip())
+    return jsonify({"erro": f"{recurso} indisponivel: consulta ao sistema hospitalar demorou "
+                            "demais. Tente novamente em alguns instantes."}), 503
+
+
 def nomes_profissionais_integra():
     """Nomes distintos dos profissionais (busca no registro de pendencias).
     Lista vazia se a tabela de profissionais estiver indisponivel."""
@@ -705,16 +719,27 @@ def dentro_do_filtro_prazo(dias, filtro):
 # alguns segundos (a lista e paginada no navegador e cada pagina chamava a
 # consulta inteira de novo). A chave inclui o "estado" dos prontuarios ja
 # registrados, entao registrar uma alta invalida o cache na hora.
-_CACHE_ALTAS = {"chave": None, "expira": 0.0, "linhas": None}
+_CACHE_ALTAS = {"chave": None, "expira": 0.0, "linhas": None, "falha": None, "falha_expira": 0.0}
 CACHE_ALTAS_SEGUNDOS = 60
+# Depois de uma falha (consulta lenta/conexao instavel), espera um pouco antes
+# de tentar de novo, em vez de repetir a consulta pesada a cada requisicao.
+CACHE_ALTAS_FALHA_SEGUNDOS = 15
 
 
 def _consultar_altas_integra(importadas):
     """Ultimo leito de cada internacao com alta valida, ainda nao registrada.
     A consulta pesada (filtro + DISTINCT ON + LIMIT) roda so sobre
     t_internacao_leito/t_internacao; paciente, clinica, destino, motivo e
-    primeira entrada sao buscados depois, apenas para as linhas exibidas."""
-    return db.query_integra(
+    primeira entrada sao buscados depois, apenas para as linhas exibidas.
+
+    As ja importadas sao excluidas ANTES do DISTINCT ON (nao depois), para
+    o sort pesado nao processar leitos que ja vao ser descartados.
+
+    "primeira_entrada" (1a entrada da internacao) e "dsc_motivo_alta" NAO
+    vem mais como subconsulta correlacionada (rodava 1x por linha, ate 500x,
+    em t_internacao_leito/t_internacao_alta sem indice por isn_internacao) -
+    agora sao 2 consultas em lote, feitas 1x so para todas as linhas."""
+    pendentes = db.query_integra(
         """WITH ultimas AS (
                SELECT DISTINCT ON (il.isn_internacao)
                       il.isn_internacao_leito, il.isn_internacao, il.isn_clinica,
@@ -725,22 +750,15 @@ def _consultar_altas_integra(importadas):
                WHERE il.isn_destino = ANY(%s) AND il.dat_alta >= %s
                      AND i.isn_tipo_atendimento = 1
                      AND il.isn_clinica = ANY(%s)
+                     AND il.isn_internacao_leito <> ALL(%s::BIGINT[])
                ORDER BY il.isn_internacao, il.isn_internacao_leito DESC
            ),
            pendentes AS (
                SELECT * FROM ultimas
-               WHERE isn_internacao_leito <> ALL(%s::BIGINT[])
                ORDER BY dat_alta ASC, hor_alta ASC
                LIMIT 500
            )
            SELECT pe.*,
-                  (SELECT MIN(il2.dat_internacao) FROM t_internacao_leito il2
-                     WHERE il2.isn_internacao = pe.isn_internacao) AS primeira_entrada,
-                  (SELECT ma.dsc_motivo_alta
-                     FROM t_internacao_alta ia
-                     LEFT JOIN t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
-                     WHERE ia.isn_internacao = pe.isn_internacao
-                     ORDER BY ia.dat_cadastro DESC LIMIT 1) AS dsc_motivo_alta,
                   d.dsc_destino, c.dsc_clinica AS unidade_nome,
                   p.num_prontuario, p.dsc_nome AS paciente_nome
            FROM pendentes pe
@@ -750,6 +768,31 @@ def _consultar_altas_integra(importadas):
            ORDER BY pe.dat_alta ASC, pe.hor_alta ASC""",
         (list(ALTAS_DESTINOS_VALIDOS), ALTAS_DATA_INICIO, list(UNIDADES_PERMITIDAS), sorted(importadas))
     )
+
+    primeiras = primeiras_entradas_internacao(r["isn_internacao_leito"] for r in pendentes)
+    motivos = motivos_alta_internacao(r["isn_internacao"] for r in pendentes)
+    for r in pendentes:
+        r["primeira_entrada"] = primeiras.get(int(r["isn_internacao_leito"]))
+        r["dsc_motivo_alta"] = motivos.get(int(r["isn_internacao"]))
+    return pendentes
+
+
+def motivos_alta_internacao(isns_internacao):
+    """{isn_internacao: dsc_motivo_alta mais recente}. Consulta em lote
+    (1x), em vez de 1 subconsulta por linha."""
+    isns = sorted({int(i) for i in isns_internacao if i})
+    if not isns:
+        return {}
+    rows = db.query_integra(
+        """SELECT DISTINCT ON (ia.isn_internacao)
+                  ia.isn_internacao, ma.dsc_motivo_alta
+           FROM t_internacao_alta ia
+           LEFT JOIN t_motivo_alta ma ON ma.isn_motivo_alta = ia.cod_tipo_alta
+           WHERE ia.isn_internacao = ANY(%s)
+           ORDER BY ia.isn_internacao, ia.dat_cadastro DESC""",
+        (isns,)
+    )
+    return {int(r["isn_internacao"]): r["dsc_motivo_alta"] for r in rows}
 
 
 def listar_altas_pendentes():
@@ -763,8 +806,15 @@ def listar_altas_pendentes():
     agora_seg = time.monotonic()
     if _CACHE_ALTAS["chave"] == chave and _CACHE_ALTAS["expira"] > agora_seg:
         altas = _CACHE_ALTAS["linhas"]
+    elif _CACHE_ALTAS["falha_expira"] > agora_seg:
+        # Falhou ha pouco: nao martela o sistema hospitalar de novo agora.
+        raise _CACHE_ALTAS["falha"]
     else:
-        altas = _consultar_altas_integra(importadas)
+        try:
+            altas = _consultar_altas_integra(importadas)
+        except ERROS_INTEGRA_LENTO as exc:
+            _CACHE_ALTAS.update(falha=exc, falha_expira=agora_seg + CACHE_ALTAS_FALHA_SEGUNDOS)
+            raise
         _CACHE_ALTAS.update(chave=chave, expira=agora_seg + CACHE_ALTAS_SEGUNDOS, linhas=altas)
 
     agora = agora_local()
@@ -1636,6 +1686,8 @@ def register_routes(app):
             return jsonify(listar_prescricoes_internacao(isn_internacao))
         except ERROS_TABELA_OPCIONAL as exc:
             return resposta_tabela_indisponivel("Prescricoes", exc)
+        except ERROS_INTEGRA_LENTO as exc:
+            return resposta_consulta_lenta("Prescricoes", exc)
 
     @app.route("/api/prontuarios/<int:prontuario_id>/evolucoes", methods=["GET"])
     @login_required
@@ -1650,6 +1702,8 @@ def register_routes(app):
             return jsonify(listar_evolucoes_internacao(isn_internacao))
         except ERROS_TABELA_OPCIONAL as exc:
             return resposta_tabela_indisponivel("Evolucoes", exc)
+        except ERROS_INTEGRA_LENTO as exc:
+            return resposta_consulta_lenta("Evolucoes", exc)
 
     @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento-sop", methods=["POST"])
     @login_required
@@ -1700,7 +1754,10 @@ def register_routes(app):
             pagina = 1
         prazo = v.escolha(request.args.get("prazo"), "prazo", ("30", "60", "80", "90", "90+"))
 
-        pendentes = listar_altas_pendentes()
+        try:
+            pendentes = listar_altas_pendentes()
+        except ERROS_INTEGRA_LENTO as exc:
+            return resposta_consulta_lenta("Altas", exc)
         if prazo:
             pendentes = [a for a in pendentes if dentro_do_filtro_prazo(a["dias_desde_alta"], prazo)]
         total = len(pendentes)

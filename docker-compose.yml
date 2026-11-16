@@ -21,8 +21,11 @@
 #
 # gunicorn: --threads 4 deixa cada processo atender varias requisicoes ao
 # mesmo tempo (a tela do SOP carrega varias listas em paralelo) e
-# --timeout 120 evita que uma consulta lenta ao sistema hospitalar derrube a
+# --timeout 180 evita que uma consulta lenta ao sistema hospitalar derrube a
 # conexao (no navegador: "NetworkError when attempting to fetch resource").
+# Precisa ficar ACIMA do INTEGRA_TIMEOUT_MS (db.py, hoje 150s): quem deve
+# cancelar uma consulta lenta e o Postgres (erro claro), nao o gunicorn
+# matando o worker (sem log, sem resposta).
 #
 # O mapeamento extra_hosts faz "host.docker.internal" (usado dentro dos
 # .env quando o Postgres roda no mesmo host dos containers) funcionar
@@ -35,12 +38,14 @@ services:
     working_dir: /app
     volumes:
       - .:/app
+    environment:
+      PYTHONUNBUFFERED: "1"
     ports:
       - "5500:5500"
     command: >
       sh -c "touch .env && chmod 600 .env &&
              pip install --no-cache-dir -r requirements.txt &&
-             gunicorn -w 4 --threads 4 --timeout 120 -b 0.0.0.0:5500 app:app"
+             gunicorn -w 4 --threads 4 --timeout 180 -b 0.0.0.0:5500 app:app"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -65,12 +70,13 @@ services:
       - .:/app
     environment:
       AMBIENTE: homolog
+      PYTHONUNBUFFERED: "1"
     ports:
       - "5501:5501"
     command: >
       sh -c "touch .env.homolog && chmod 600 .env.homolog &&
              pip install --no-cache-dir -r requirements.txt &&
-             gunicorn -w 2 --threads 4 --timeout 120 -b 0.0.0.0:5501 app:app"
+             gunicorn -w 2 --threads 4 --timeout 180 -b 0.0.0.0:5501 app:app"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
