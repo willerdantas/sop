@@ -246,10 +246,28 @@ CREATE TABLE IF NOT EXISTS prontuario_procedimentos (
     procedimento_id INTEGER NOT NULL REFERENCES procedimentos_sigtap(id),
     quantidade      INTEGER NOT NULL DEFAULT 1,
     usuario_id      INTEGER REFERENCES usuarios(id),
-    criado_em       TIMESTAMP NOT NULL DEFAULT NOW()
+    criado_em       TIMESTAMP NOT NULL DEFAULT NOW(),
+    competencia     VARCHAR(7)  -- 'AAAA-MM': mes de faturamento ao qual o procedimento pertence
 );
 
 CREATE INDEX IF NOT EXISTS idx_prontuario_procedimentos_prontuario ON prontuario_procedimentos(prontuario_id);
+
+ALTER TABLE prontuario_procedimentos ADD COLUMN IF NOT EXISTS competencia VARCHAR(7);
+UPDATE prontuario_procedimentos SET competencia = to_char(criado_em, 'YYYY-MM') WHERE competencia IS NULL;
+
+-- ---------------------------------------------------------
+-- DIAS DE INTERNACAO POR COMPETENCIA (faturamento mes a mes de
+-- internacoes longas, que atravessam mais de uma competencia)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS prontuario_competencia_faturamento (
+    prontuario_id       INTEGER NOT NULL REFERENCES prontuarios(id) ON DELETE CASCADE,
+    competencia         VARCHAR(7) NOT NULL,  -- 'AAAA-MM'
+    dias_enfermaria      INTEGER,
+    dias_uti             INTEGER,
+    diaria_acompanhante  INTEGER,
+    atualizado_em        TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (prontuario_id, competencia)
+);
 
 -- ---------------------------------------------------------
 -- ANALISES DE PRONTUARIO (sessoes de analise no SOP e em Contas Medicas,

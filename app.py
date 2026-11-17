@@ -156,6 +156,111 @@ def profissional_br(nome, conselho=None, numero=None):
     return f"{nome} ({registro})" if registro else nome
 
 
+MESES_PT = ("Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+            "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro")
+
+COMPETENCIA_VALIDA = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def _como_data(valor):
+    """Converte string ISO (data ou data+hora) para date/datetime; devolve
+    o proprio valor se ja for um ou None se nao for possivel converter."""
+    if isinstance(valor, str):
+        texto = valor.strip()
+        try:
+            return datetime.fromisoformat(texto) if ("T" in texto or " " in texto) else date.fromisoformat(texto)
+        except ValueError:
+            return None
+    return valor if isinstance(valor, (date, datetime)) else None
+
+
+def chave_competencia(valor):
+    """'AAAA-MM' a partir de uma data/datetime/string ISO, ou None se vazio
+    ou nao reconhecido."""
+    valor = _como_data(valor)
+    return f"{valor.year:04d}-{valor.month:02d}" if valor else None
+
+
+def rotulo_de_chave_competencia(chave):
+    """'Mes/Ano' (ex: Novembro/2026) a partir de uma chave 'AAAA-MM'."""
+    try:
+        ano, mes = chave.split("-")
+        return f"{MESES_PT[int(mes) - 1]}/{ano}"
+    except (ValueError, IndexError, AttributeError):
+        return "Sem data"
+
+
+def dividir_leitos_por_competencia(historico_leitos):
+    """Quebra cada registro de leito que atravessa virada de mes em varios
+    segmentos, um por competencia. O dia da virada conta como fim de um
+    segmento e inicio do proximo (ex: 31/10 a 02/11 quebra em 31/10-01/11,
+    competencia de outubro, e 01/11-02/11, competencia de novembro)."""
+    resultado = []
+    for h in historico_leitos:
+        inicio = h.get("dat_internacao")
+        fim_real = h.get("dat_alta")
+        fim_calculo = fim_real or date.today()
+        if not inicio or fim_calculo <= inicio:
+            resultado.append(dict(h))
+            continue
+        atual = inicio
+        while True:
+            mes_seguinte = 1 if atual.month == 12 else atual.month + 1
+            ano_seguinte = atual.year + 1 if atual.month == 12 else atual.year
+            virada = date(ano_seguinte, mes_seguinte, 1)
+            if virada >= fim_calculo:
+                segmento = dict(h)
+                segmento["dat_internacao"] = atual
+                segmento["dat_alta"] = fim_real
+                segmento["dias_clinica"] = (fim_calculo - atual).days
+                resultado.append(segmento)
+                break
+            segmento = dict(h)
+            segmento["dat_internacao"] = atual
+            segmento["dat_alta"] = virada
+            segmento["dias_clinica"] = (virada - atual).days
+            resultado.append(segmento)
+            atual = virada
+    return resultado
+
+
+def organizar_por_competencia(**listas_por_campo):
+    """Recebe {nome_da_secao: (lista, campo_data)} e devolve uma lista de
+    competencias (chave 'AAAA-MM', da mais recente para a mais antiga),
+    cada uma com as linhas de cada secao que caem naquele mes (lista vazia
+    se a secao nao tiver nada naquele mes). Usado para separar a analise
+    de Contas Medicas por competencia."""
+    por_secao = {}
+    chaves = set()
+    for nome, (linhas, campo) in listas_por_campo.items():
+        indice = {}
+        for linha in linhas:
+            chave = chave_competencia(linha.get(campo)) or "0000-00"
+            chaves.add(chave)
+            indice.setdefault(chave, []).append(linha)
+        por_secao[nome] = indice
+
+    resultado = []
+    for chave in sorted(chaves, reverse=True):
+        competencia = {"chave": chave, "competencia": rotulo_de_chave_competencia(chave)}
+        for nome in listas_por_campo:
+            competencia[nome] = por_secao[nome].get(chave, [])
+        resultado.append(competencia)
+    return resultado
+
+
+def agrupar_por_chave_competencia(linhas, campo_chave):
+    """Agrupa uma lista de dicts pela chave de competencia ja gravada no
+    proprio registro (campo_chave, formato 'AAAA-MM'), sem derivar de
+    nenhuma data - usado para procedimentos, cuja competencia e escolhida
+    explicitamente ao incluir (ver api_incluir_procedimento_prontuario)."""
+    indice = {}
+    for linha in linhas:
+        chave = linha.get(campo_chave) or "0000-00"
+        indice.setdefault(chave, []).append(linha)
+    return indice
+
+
 def primeiras_entradas_internacao(isns_internacao_leito):
     """{isn_internacao_leito: data do primeiro leito da internacao}. A data
     gravada no prontuario e a do ultimo leito; o tempo total de internacao
@@ -363,14 +468,12 @@ def listar_prescricoes_internacao(isn_internacao):
     da prescricao e clinica/enfermaria/leito."""
     if not isn_internacao:
         return []
-    col_tipo = _primeira_coluna("t_tipo_prescricao", ("dsc_tipo_prescricao", "dsc_tipo"), prefixo="dsc_")
     col_apz = _primeira_coluna("t_prescricao_pep", ("isn_profissional_apz", "ian_profissional_apz"))
     # dat_prescricao nao existe em todas as instalacoes: a data real da
     # prescricao fica em dat_cadastro (confirmado via consulta direta ao
     # schema deste hospital).
     col_data = _primeira_coluna("t_prescricao_pep", ("dat_prescricao", "dat_cadastro")) or "dat_cadastro"
     data_sql = psql.SQL("pr.{}").format(psql.Identifier(col_data))
-    tipo_sql = psql.SQL("tp.{}").format(psql.Identifier(col_tipo)) if col_tipo else psql.SQL("NULL")
     if col_apz:
         apz_join = psql.SQL(
             """LEFT JOIN t_profissional apz ON apz.isn_usuario = pr.{}
@@ -384,14 +487,14 @@ def listar_prescricoes_internacao(isn_internacao):
         apz_campos = psql.SQL("""NULL AS aprazamento_nome, NULL AS aprazamento_num_conselho,
                NULL AS aprazamento_conselho""")
     consulta = psql.SQL("""
-        SELECT {data} AS dat_prescricao, {tipo} AS tipo,
+        SELECT pr.isn_prescricao_pep, {data} AS dat_prescricao, tipo.dsc_prescricao_tipo AS tipo,
                TRIM(prof.dsc_usuario) AS profissional_nome,
                TRIM(prof.num_conselho::text) AS profissional_num_conselho,
                TRIM(cprof.cod_conselho::text) AS profissional_conselho,
                {apz_campos},
                il.isn_clinica, c.dsc_clinica, e.dsc_enfermaria, l.dsc_leito
         FROM t_prescricao_pep pr
-        LEFT JOIN t_tipo_prescricao tp ON tp.isn_tipo_prescricao = pr.isn_prescricao_tipo
+        LEFT JOIN t_prescricao_tipo tipo ON tipo.isn_prescricao_tipo = pr.isn_prescricao_tipo
         LEFT JOIN t_profissional prof ON prof.isn_usuario = pr.isn_profissional
         LEFT JOIN t_conselho cprof ON cprof.isn_conselho = prof.isn_conselho
         {apz_join}
@@ -401,11 +504,34 @@ def listar_prescricoes_internacao(isn_internacao):
         LEFT JOIN t_leito l ON l.isn_leito = il.isn_leito
         WHERE pr.isn_internacao = %s AND pr.dat_cancelamento IS NULL
         ORDER BY {data} DESC
-        LIMIT 1000""").format(data=data_sql, tipo=tipo_sql, apz_campos=apz_campos, apz_join=apz_join)
+        LIMIT 1000""").format(data=data_sql, apz_campos=apz_campos, apz_join=apz_join)
     rows = db.query_integra(consulta, (isn_internacao,))
+    mapa_itens = itens_prescricao(r.get("isn_prescricao_pep") for r in rows)
     for r in rows:
         r["isn_clinica"] = int(r["isn_clinica"]) if r["isn_clinica"] is not None else None
+        isn_pep = r.get("isn_prescricao_pep")
+        r["itens"] = mapa_itens.get(int(isn_pep), []) if isn_pep is not None else []
     return rows
+
+
+def itens_prescricao(isns_prescricao_pep):
+    """{isn_prescricao_pep: [dsc_prescricao, ...]} (t_prescricao_pep_item),
+    so os itens ativos (flg_ativo = 'S'); consulta em lote em vez de uma
+    por prescricao."""
+    isns = sorted({int(i) for i in isns_prescricao_pep if i is not None})
+    if not isns:
+        return {}
+    rows = db.query_integra(
+        """SELECT isn_prescricao_pep, dsc_prescricao
+           FROM t_prescricao_pep_item
+           WHERE isn_prescricao_pep = ANY(%s) AND flg_ativo = 'S'
+           ORDER BY isn_prescricao_pep""",
+        (isns,)
+    )
+    mapa = {}
+    for r in rows:
+        mapa.setdefault(int(r["isn_prescricao_pep"]), []).append(r["dsc_prescricao"])
+    return mapa
 
 
 def listar_evolucoes_internacao(isn_internacao):
@@ -518,6 +644,44 @@ def salvar_unidades_usuario(usuario_id, unidade_ids):
             "INSERT INTO usuario_unidades (usuario_id, unidade_id) VALUES (%s, %s)",
             (usuario_id, uid)
         )
+
+
+def buscar_internacao_para_registro(isn_internacao_leito):
+    """Busca a internacao no sistema hospitalar e valida se pode ser
+    registrada no fluxo (ainda nao registrada, com numero de prontuario,
+    unidade permitida ao usuario logado). Devolve (internacao,
+    numero_prontuario, unidade_internacao, erro); 'erro' e uma tupla
+    (jsonify(...), status) pronta pra devolver se algo bloquear o registro,
+    ou None se estiver tudo certo."""
+    ja_existe = db.query(
+        "SELECT id FROM prontuarios WHERE integra_isn_internacao_leito = %s",
+        (isn_internacao_leito,), fetchone=True
+    )
+    if ja_existe:
+        return None, None, None, (jsonify({"erro": "esta internacao ja foi registrada no fluxo"}), 409)
+
+    internacao = db.query_integra(
+        """SELECT il.isn_internacao_leito, il.isn_clinica, il.dat_internacao, il.dat_alta,
+                  p.num_prontuario, p.dsc_nome AS paciente_nome, d.dsc_destino
+           FROM t_internacao_leito il
+           JOIN t_internacao i ON i.isn_internacao = il.isn_internacao
+           JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
+           LEFT JOIN t_destino d ON d.isn_destino = il.isn_destino
+           WHERE il.isn_internacao_leito = %s AND i.isn_tipo_atendimento = 1""",
+        (isn_internacao_leito,), fetchone=True
+    )
+    if not internacao:
+        return None, None, None, (jsonify({"erro": "internacao nao encontrada no sistema hospitalar"}), 404)
+
+    numero_prontuario = (internacao["num_prontuario"] or "").strip()
+    if not numero_prontuario:
+        return None, None, None, (
+            jsonify({"erro": "esta internacao nao possui numero de prontuario no sistema hospitalar"}), 400)
+    unidade_internacao = int(internacao["isn_clinica"]) if internacao["isn_clinica"] is not None else None
+    if not prontuario_da_unidade_do_usuario({"unidade_id": unidade_internacao}):
+        return None, None, None, (jsonify({"erro": "sem permissao para registrar internacoes desta unidade"}), 403)
+
+    return internacao, numero_prontuario, unidade_internacao, None
 
 
 def historico_internacao(integra_isn_internacao_leito):
@@ -1015,8 +1179,9 @@ ENDPOINT_PARA_PAGINAS = {
     "analise_c_medicas_prontuario": ("contas_medicas",),
     "api_listar_prontuarios": ("sop", "unidade", "contas_medicas"),
     "api_obter_prontuario": ("sop", "unidade", "contas_medicas"),
-    "api_buscar_internacoes_prontuario": ("sop",),
+    "api_buscar_internacoes_prontuario": ("sop", "contas_medicas"),
     "api_registrar_internacao": ("sop",),
+    "api_registrar_internacao_contas_medicas": ("contas_medicas",),
     "api_mover_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_unidades_envio_prontuario": ("sop",),
     "api_confirmar_recebimento_sop": ("sop",),
@@ -1376,6 +1541,59 @@ def register_routes(app):
         isn_internacao, historico_leitos = historico_internacao(prontuario.get("integra_isn_internacao_leito"))
         exames = listar_exames_internacao(isn_internacao)
         resumo_exames = resumir_exames_por_classificacao(exames)
+        try:
+            prescricoes = listar_prescricoes_internacao(isn_internacao)
+        except ERROS_TABELA_OPCIONAL as exc:
+            print(f"[aviso] prescricoes indisponiveis: {exc.pgerror or exc}".strip())
+            prescricoes = []
+        except ERROS_INTEGRA_LENTO as exc:
+            print(f"[aviso] prescricoes indisponiveis (consulta lenta): {exc}".strip())
+            prescricoes = []
+        procedimentos = db.query(
+            """SELECT pp.id, pp.quantidade, pp.criado_em, pp.competencia,
+                      ps.codigo, ps.descricao,
+                      u.nome AS usuario_nome
+               FROM prontuario_procedimentos pp
+               JOIN procedimentos_sigtap ps ON ps.id = pp.procedimento_id
+               LEFT JOIN usuarios u ON u.id = pp.usuario_id
+               WHERE pp.prontuario_id = %s
+               ORDER BY pp.criado_em DESC""",
+            (prontuario_id,)
+        )
+        faturamento_salvo = db.query(
+            """SELECT competencia, dias_enfermaria, dias_uti, diaria_acompanhante
+               FROM prontuario_competencia_faturamento WHERE prontuario_id = %s""",
+            (prontuario_id,)
+        )
+        mapa_faturamento_salvo = {f["competencia"]: f for f in faturamento_salvo}
+
+        historico_leitos_dividido = dividir_leitos_por_competencia(historico_leitos)
+        procedimentos_por_competencia = agrupar_por_chave_competencia(procedimentos, "competencia")
+
+        competencias = organizar_por_competencia(
+            historico_leitos=(historico_leitos_dividido, "dat_internacao"),
+            exames=(exames, "dat_solicitacao"),
+            prescricoes=(prescricoes, "dat_prescricao"),
+        )
+        chaves_existentes = {comp["chave"] for comp in competencias}
+        for chave in procedimentos_por_competencia:
+            if chave not in chaves_existentes:
+                competencias.append({
+                    "chave": chave, "competencia": rotulo_de_chave_competencia(chave),
+                    "historico_leitos": [], "exames": [], "prescricoes": [],
+                })
+        competencias.sort(key=lambda c: c["chave"], reverse=True)
+
+        for comp in competencias:
+            comp["resumo_exames"] = resumir_exames_por_classificacao(comp["exames"])
+            comp["procedimentos"] = procedimentos_por_competencia.get(comp["chave"], [])
+            dias_enfermaria_mes, dias_uti_mes = somar_dias_por_tipo_internacao(comp["historico_leitos"])
+            salvo = mapa_faturamento_salvo.get(comp["chave"])
+            comp["dias_enfermaria"] = salvo["dias_enfermaria"] if salvo and salvo["dias_enfermaria"] is not None else dias_enfermaria_mes
+            comp["dias_uti"] = salvo["dias_uti"] if salvo and salvo["dias_uti"] is not None else dias_uti_mes
+            comp["diaria_acompanhante"] = (salvo["diaria_acompanhante"]
+                                            if salvo and salvo["diaria_acompanhante"] is not None
+                                            else dias_enfermaria_mes)
 
         unidades_pendencia = unidades_do_prontuario(prontuario, historico_leitos)
 
@@ -1384,8 +1602,6 @@ def register_routes(app):
         if historico_leitos:
             min_data_ocorrencia = min(h["dat_internacao"] for h in historico_leitos if h["dat_internacao"])
             max_data_ocorrencia = max((h["dat_alta"] or date.today()) for h in historico_leitos)
-
-        dias_enfermaria_calc, dias_uti_calc = somar_dias_por_tipo_internacao(historico_leitos)
 
         dados_paciente = buscar_dados_paciente(isn_internacao)
         idade = calcular_idade(dados_paciente["dat_nascimento"], dados_paciente["data_obito"] or date.today())
@@ -1397,10 +1613,10 @@ def register_routes(app):
             prontuario=prontuario, tipos=tipos, profissionais=profissionais,
             isn_internacao=isn_internacao, historico_leitos=historico_leitos,
             exames=exames, resumo_exames=resumo_exames,
+            prescricoes=prescricoes, procedimentos=procedimentos, competencias=competencias,
             dat_nascimento=dados_paciente["dat_nascimento"], idade=idade,
             dsc_mae=dados_paciente["dsc_mae"], num_cpf=dados_paciente["num_cpf"],
             num_cns=dados_paciente["num_cns"], cids=cids,
-            dias_enfermaria_calc=dias_enfermaria_calc, dias_uti_calc=dias_uti_calc,
             internacao_24h=(anexar_internacao_total([dict(prontuario)])[0]["internacao_total_dias"] == 0),
             unidades_pendencia=unidades_pendencia,
             min_data_ocorrencia=min_data_ocorrencia, max_data_ocorrencia=max_data_ocorrencia,
@@ -1680,22 +1896,30 @@ def register_routes(app):
         atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
         return jsonify(atualizado)
 
-    @app.route("/api/prontuarios/<int:prontuario_id>/valores-faturamento", methods=["PUT"])
+    @app.route("/api/prontuarios/<int:prontuario_id>/valores-faturamento/<competencia>", methods=["PUT"])
     @login_required
-    def api_editar_valores_faturamento(prontuario_id):
+    def api_editar_valores_faturamento(prontuario_id, competencia):
+        if not COMPETENCIA_VALIDA.match(competencia):
+            return jsonify({"erro": "competencia invalida"}), 400
         data = v.corpo_json()
         _, erro = obter_prontuario_autorizado(prontuario_id)
         if erro:
             return erro
 
         atualizado = db.execute(
-            """UPDATE prontuarios
-               SET dias_enfermaria=%s, dias_uti=%s, diaria_acompanhante=%s
-               WHERE id=%s RETURNING *""",
-            (v.inteiro(data.get("dias_enfermaria"), "dias de enfermaria", minimo=0, maximo=3650),
+            """INSERT INTO prontuario_competencia_faturamento
+                   (prontuario_id, competencia, dias_enfermaria, dias_uti, diaria_acompanhante)
+               VALUES (%s,%s,%s,%s,%s)
+               ON CONFLICT (prontuario_id, competencia) DO UPDATE SET
+                   dias_enfermaria = EXCLUDED.dias_enfermaria,
+                   dias_uti = EXCLUDED.dias_uti,
+                   diaria_acompanhante = EXCLUDED.diaria_acompanhante,
+                   atualizado_em = NOW()
+               RETURNING *""",
+            (prontuario_id, competencia,
+             v.inteiro(data.get("dias_enfermaria"), "dias de enfermaria", minimo=0, maximo=3650),
              v.inteiro(data.get("dias_uti"), "dias de UTI", minimo=0, maximo=3650),
-             v.inteiro(data.get("diaria_acompanhante"), "diarias de acompanhante", minimo=0, maximo=3650),
-             prontuario_id)
+             v.inteiro(data.get("diaria_acompanhante"), "diarias de acompanhante", minimo=0, maximo=3650))
         )
         return jsonify(atualizado)
 
@@ -1971,31 +2195,9 @@ def register_routes(app):
     @app.route("/api/internacoes/<int:isn_internacao_leito>/registrar", methods=["POST"])
     @login_required
     def api_registrar_internacao(isn_internacao_leito):
-        ja_existe = db.query(
-            "SELECT id FROM prontuarios WHERE integra_isn_internacao_leito = %s",
-            (isn_internacao_leito,), fetchone=True
-        )
-        if ja_existe:
-            return jsonify({"erro": "esta internacao ja foi registrada no fluxo"}), 409
-
-        internacao = db.query_integra(
-            """SELECT il.isn_internacao_leito, il.isn_clinica, il.dat_internacao, il.dat_alta,
-                      p.num_prontuario, p.dsc_nome AS paciente_nome
-               FROM t_internacao_leito il
-               JOIN t_internacao i ON i.isn_internacao = il.isn_internacao
-               JOIN t_paciente p ON p.isn_paciente = i.isn_paciente
-               WHERE il.isn_internacao_leito = %s AND i.isn_tipo_atendimento = 1""",
-            (isn_internacao_leito,), fetchone=True
-        )
-        if not internacao:
-            return jsonify({"erro": "internacao nao encontrada no sistema hospitalar"}), 404
-
-        numero_prontuario = (internacao["num_prontuario"] or "").strip()
-        if not numero_prontuario:
-            return jsonify({"erro": "esta internacao nao possui numero de prontuario no sistema hospitalar"}), 400
-        unidade_internacao = int(internacao["isn_clinica"]) if internacao["isn_clinica"] is not None else None
-        if not prontuario_da_unidade_do_usuario({"unidade_id": unidade_internacao}):
-            return jsonify({"erro": "sem permissao para registrar internacoes desta unidade"}), 403
+        internacao, numero_prontuario, unidade_internacao, erro = buscar_internacao_para_registro(isn_internacao_leito)
+        if erro:
+            return erro
 
         data = v.corpo_json()
         prioridade = v.escolha(data.get("prioridade"), "prioridade", PRIORIDADES, padrao="normal")
@@ -2020,6 +2222,45 @@ def register_routes(app):
             db.execute(
                 """INSERT INTO movimentacoes (prontuario_id, origem, destino, usuario_id, observacao)
                    VALUES (%s, 'cadastro', 'sop', %s, 'Registrado manualmente via busca por numero de prontuario')""",
+                (novo["id"], session["usuario_id"])
+            )
+            return jsonify(novo), 201
+        except psycopg2.errors.UniqueViolation:
+            db.get_conn().rollback()
+            return jsonify({"erro": "numero de prontuario ja cadastrado"}), 409
+
+    @app.route("/api/internacoes/<int:isn_internacao_leito>/registrar-contas-medicas", methods=["POST"])
+    @login_required
+    def api_registrar_internacao_contas_medicas(isn_internacao_leito):
+        internacao, numero_prontuario, unidade_internacao, erro = buscar_internacao_para_registro(isn_internacao_leito)
+        if erro:
+            return erro
+
+        data = v.corpo_json()
+        prioridade = v.escolha(data.get("prioridade"), "prioridade", PRIORIDADES, padrao="normal")
+        localizacao = v.texto(data.get("localizacao_fisica"), "localizacao fisica", 120)
+
+        try:
+            novo = db.execute(
+                """INSERT INTO prontuarios
+                    (numero_prontuario, paciente_nome, unidade_id, data_internacao,
+                     data_alta, prioridade, localizacao_fisica, status_atual,
+                     integra_isn_internacao_leito, recebido_contas_medicas_em,
+                     recebido_contas_medicas_usuario_id)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,'contas_medicas',%s,NOW(),%s)
+                   RETURNING *""",
+                (
+                    numero_prontuario, internacao["paciente_nome"],
+                    unidade_internacao,
+                    internacao["dat_internacao"], internacao["dat_alta"],
+                    prioridade, localizacao,
+                    isn_internacao_leito, session["usuario_id"],
+                )
+            )
+            db.execute(
+                """INSERT INTO movimentacoes (prontuario_id, origem, destino, usuario_id, observacao)
+                   VALUES (%s, 'cadastro', 'contas_medicas', %s,
+                           'Registrado manualmente em Contas Medicas via busca por numero de prontuario')""",
                 (novo["id"], session["usuario_id"])
             )
             return jsonify(novo), 201
@@ -2415,6 +2656,11 @@ def register_routes(app):
         data = v.corpo_json()
         procedimento_id = v.inteiro(data.get("procedimento_id"), "procedimento_id", obrigatorio=True, minimo=1)
         quantidade = v.inteiro(data.get("quantidade"), "quantidade", minimo=1, maximo=999, padrao=1)
+        # competencia e opcional: paginas que nao separam por competencia
+        # (SOP, Unidade) nao enviam, e o procedimento cai no mes atual.
+        competencia = (data.get("competencia") or "").strip() or chave_competencia(date.today())
+        if not COMPETENCIA_VALIDA.match(competencia):
+            return jsonify({"erro": "competencia invalida"}), 400
         _, erro = obter_prontuario_autorizado(prontuario_id)
         if erro:
             return erro
@@ -2423,9 +2669,9 @@ def register_routes(app):
             return jsonify({"erro": "procedimento nao encontrado"}), 404
 
         db.execute(
-            """INSERT INTO prontuario_procedimentos (prontuario_id, procedimento_id, quantidade, usuario_id)
-               VALUES (%s,%s,%s,%s) RETURNING id""",
-            (prontuario_id, procedimento_id, quantidade, session["usuario_id"])
+            """INSERT INTO prontuario_procedimentos (prontuario_id, procedimento_id, quantidade, usuario_id, competencia)
+               VALUES (%s,%s,%s,%s,%s) RETURNING id""",
+            (prontuario_id, procedimento_id, quantidade, session["usuario_id"], competencia)
         )
         return jsonify({"ok": True}), 201
 

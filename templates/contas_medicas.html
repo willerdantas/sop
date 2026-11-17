@@ -23,6 +23,9 @@
     <label>Data Fim</label>
     <input type="date" id="filtro-data-fim">
   </div>
+  <button class="btn btn-laranja" id="btn-novo-prontuario-contas" type="button">
+    {{ icons.icone('plus') }} Novo Prontuário
+  </button>
   <div class="kpi-destaque">
     <div class="kpi-label">EM CONTAS MÉDICAS AGORA</div>
     <div class="kpi-valor" id="kpi-total-contas">--</div>
@@ -170,6 +173,39 @@
         <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
       </tbody>
     </table>
+  </div>
+</div>
+
+<!-- Modal novo prontuario direto em contas medicas -->
+<div class="modal-fundo" id="modal-novo-prontuario-contas">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-novo-prontuario-contas">{{ icons.icone('x') }}</button>
+    <h3>Cadastrar Prontuário em Contas Médicas</h3>
+    <form id="form-buscar-internacao-contas" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:30px;">
+      <div class="campo" style="flex:1; margin-bottom:0;">
+        <label>Número do Prontuário *</label>
+        <input type="text" id="busca-numero-prontuario-contas" required placeholder="Ex: 624034" autofocus>
+      </div>
+      <button type="submit" class="btn btn-primario btn-sm" style="width:auto;">Buscar</button>
+    </form>
+    <div class="tabela-wrap">
+      <table class="tabela-padrao">
+        <thead>
+          <tr>
+            <th>Nº Internação</th>
+            <th>Paciente</th>
+            <th>Data Internação</th>
+            <th>Data Alta</th>
+            <th>Destino</th>
+            <th>Motivo Alta</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-busca-internacoes-contas">
+          <tr><td colspan="7" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -12,8 +12,8 @@ let procedimentoSelecionadoId = null;
 document.addEventListener("DOMContentLoaded", () => {
   carregarPendencias();
   carregarHistorico();
-  carregarProcedimentos();
   configurarBuscaProfissional();
+  configurarToggleItensPrescricao();
 
   document.getElementById("btn-nova-pendencia").addEventListener("click", () => {
     limparBuscaProfissional();
@@ -111,30 +111,40 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  document.getElementById("btn-salvar-valores-faturamento").addEventListener("click", async () => {
-    const dados = {
-      dias_enfermaria: document.getElementById("input-dias-enfermaria").value,
-      dias_uti: document.getElementById("input-dias-uti").value,
-      diaria_acompanhante: document.getElementById("input-diaria-acompanhante").value,
-    };
-
-    try {
-      await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/valores-faturamento`, {
-        method: "PUT",
-        body: JSON.stringify(dados),
-      });
-      alert("Valores salvos.");
-    } catch (e) {
-      alert(e.message);
-    }
+  // Um botao "Salvar Valores" por competencia (data-competencia identifica
+  // qual e os inputs correspondentes, sufixados com a mesma chave).
+  document.querySelectorAll(".btn-salvar-valores-faturamento").forEach((botao) => {
+    botao.addEventListener("click", async () => {
+      const competencia = botao.dataset.competencia;
+      const dados = {
+        dias_enfermaria: document.getElementById(`input-dias-enfermaria-${competencia}`).value,
+        dias_uti: document.getElementById(`input-dias-uti-${competencia}`).value,
+        diaria_acompanhante: document.getElementById(`input-diaria-acompanhante-${competencia}`).value,
+      };
+      try {
+        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/valores-faturamento/${competencia}`, {
+          method: "PUT",
+          body: JSON.stringify(dados),
+        });
+        alert("Valores salvos.");
+      } catch (e) {
+        alert(e.message);
+      }
+    });
   });
 
-  document.getElementById("btn-incluir-procedimento").addEventListener("click", () => {
-    document.getElementById("form-incluir-procedimento").reset();
-    document.getElementById("input-procedimento-id").value = "";
-    document.getElementById("resultados-procedimento").innerHTML = "";
-    procedimentoSelecionadoId = null;
-    abrirModal("modal-incluir-procedimento");
+  // Um botao "Incluir Procedimento" por competencia: abre o mesmo modal,
+  // marcando em qual competencia o procedimento incluido deve entrar.
+  document.querySelectorAll(".btn-incluir-procedimento").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      document.getElementById("form-incluir-procedimento").reset();
+      document.getElementById("input-procedimento-id").value = "";
+      document.getElementById("input-competencia-procedimento").value = botao.dataset.competencia;
+      document.getElementById("texto-competencia-procedimento").textContent = botao.dataset.competenciaRotulo;
+      document.getElementById("resultados-procedimento").innerHTML = "";
+      procedimentoSelecionadoId = null;
+      abrirModal("modal-incluir-procedimento");
+    });
   });
 
   let timerBuscaProcedimento;
@@ -180,10 +190,12 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({
           procedimento_id: procedimentoSelecionadoId,
           quantidade: document.getElementById("input-quantidade-procedimento").value || 1,
+          competencia: document.getElementById("input-competencia-procedimento").value,
         }),
       });
-      fecharModal("modal-incluir-procedimento");
-      carregarProcedimentos();
+      // Procedimentos sao listados por competencia (renderizado no servidor);
+      // recarrega a pagina para o novo item aparecer no mes certo.
+      window.location.reload();
     } catch (e) {
       alert(e.message);
     }
@@ -197,36 +209,12 @@ function selecionarProcedimento(id, codigo, descricao) {
   document.getElementById("resultados-procedimento").innerHTML = "";
 }
 
-async function carregarProcedimentos() {
-  const tbody = document.getElementById("tbody-procedimentos-analise");
-  try {
-    const lista = await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/procedimentos`);
-    if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhum procedimento incluído.</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = lista.map((p) => `
-      <tr>
-        <td><strong>${esc(p.codigo)}</strong></td>
-        <td>${esc(p.descricao)}</td>
-        <td>${esc(p.quantidade)}</td>
-        <td>${esc(formatarData(p.criado_em))}</td>
-        <td>${esc(p.usuario_nome || "-")}</td>
-        <td class="acoes-linha">
-          <button class="btn btn-perigo btn-sm" onclick="excluirProcedimentoProntuario(${esc(p.id)})">Excluir</button>
-        </td>
-      </tr>
-    `).join("");
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
-  }
-}
-
 async function excluirProcedimentoProntuario(itemId) {
   if (!confirm("Excluir este procedimento do prontuário?")) return;
   try {
     await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/procedimentos/${itemId}`, { method: "DELETE" });
-    carregarProcedimentos();
+    // Procedimentos sao listados por competencia (renderizado no servidor).
+    window.location.reload();
   } catch (e) {
     alert(e.message);
   }
@@ -324,4 +312,16 @@ async function carregarHistorico() {
   } catch (e) {
     container.innerHTML = `<p class="vazio-estado">Erro: ${esc(e.message)}</p>`;
   }
+}
+
+/** Clicar numa linha de prescricao mostra/esconde a linha com os itens
+ * (renderizada pelo servidor, ja escondida por padrao). */
+function configurarToggleItensPrescricao() {
+  document.querySelectorAll(".linha-prescricao").forEach((linha) => {
+    linha.addEventListener("click", () => {
+      const linhaItens = linha.nextElementSibling;
+      if (!linhaItens || !linhaItens.classList.contains("linha-itens-prescricao")) return;
+      linhaItens.style.display = linhaItens.style.display === "none" ? "" : "none";
+    });
+  });
 }

@@ -14,7 +14,72 @@ document.addEventListener("DOMContentLoaded", () => {
       timerBusca = setTimeout(carregarTudo, 350);
     });
   });
+
+  document.getElementById("btn-novo-prontuario-contas").addEventListener("click", () => {
+    document.getElementById("form-buscar-internacao-contas").reset();
+    document.getElementById("tbody-busca-internacoes-contas").innerHTML =
+      `<tr><td colspan="7" class="vazio-estado">Informe o número do prontuário e clique em Buscar.</td></tr>`;
+    abrirModal("modal-novo-prontuario-contas");
+  });
+
+  document.getElementById("form-buscar-internacao-contas").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    await buscarInternacoesPorProntuarioContas();
+  });
 });
+
+const DESTINO_BADGE_CLASSE_CONTAS = {
+  "Residência": "badge-ok",
+  "Outro hospital": "badge-media",
+  "Óbito": "badge-pendencia",
+};
+
+async function buscarInternacoesPorProntuarioContas() {
+  const numero = document.getElementById("busca-numero-prontuario-contas").value.trim();
+  const tbody = document.getElementById("tbody-busca-internacoes-contas");
+  if (!numero) return;
+
+  tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Buscando...</td></tr>`;
+  try {
+    const lista = await apiFetch(`/api/internacoes/buscar?numero=${encodeURIComponent(numero)}`);
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhuma internação encontrada para este número de prontuário.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map((i) => `
+      <tr>
+        <td>${esc(i.isn_internacao)}</td>
+        <td>${esc(i.paciente_nome)}</td>
+        <td>${esc(formatarDataSimples(i.dat_internacao))}</td>
+        <td>${i.dat_alta ? formatarDataSimples(i.dat_alta) : '<span class="texto-suave">em andamento</span>'}</td>
+        <td>${i.dsc_destino ? `<span class="badge ${esc(DESTINO_BADGE_CLASSE_CONTAS[i.dsc_destino] || "badge-unidade")}">${esc(i.dsc_destino)}</span>` : "-"}</td>
+        <td>${esc(i.dsc_motivo_alta || "-")}</td>
+        <td class="acoes-linha">
+          ${i.status_atual
+            ? badgeStatus(i.status_atual)
+            : `<button class="btn btn-laranja btn-sm" onclick="registrarInternacaoContas(${esc(i.isn_internacao_leito)})">Registrar em Contas Médicas</button>`}
+        </td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao buscar: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function registrarInternacaoContas(isnInternacaoLeito) {
+  if (!confirm("Confirmar o registro desta internação diretamente em Contas Médicas?")) return;
+  try {
+    await apiFetch(`/api/internacoes/${isnInternacaoLeito}/registrar-contas-medicas`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await buscarInternacoesPorProntuarioContas();
+    carregarContas();
+  } catch (e) {
+    alert(e.message);
+  }
+}
 
 function construirParamsFiltro(status) {
   const nome = document.getElementById("filtro-nome").value.trim();

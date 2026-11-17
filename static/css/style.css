@@ -250,10 +250,20 @@ ul { list-style: none; margin: 0; padding: 0; }
   font-size: 13.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
+  line-height: 1;
   transition: filter var(--transicao-padrao), transform var(--transicao-padrao);
 }
 .btn:hover { filter: brightness(1.08); }
 .btn:active { transform: scale(0.98); }
+/* Icones SVG (icons.icone) sem width/height proprio: sem isto, alguns
+   navegadores renderizam no tamanho intrinseco do viewBox (bem maior que
+   o texto ao lado), deixando o botao "gigante" dependendo do navegador/
+   resolucao. 1em acompanha o tamanho da fonte do botao (inclusive .btn-sm). */
+.btn svg {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
 
 .btn-primario { background: var(--cor-teal); color: #fff; width: 100%; margin-top: 8px; padding: 12px 20px; }
 .btn-secundario { background: var(--cor-teal-escuro); color: #fff; }
@@ -673,6 +683,15 @@ table.tabela-padrao tbody td {
 }
 table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
 
+.linha-clicavel { cursor: pointer; }
+.linha-clicavel:hover { background: #F0F6F5 !important; }
+
+.lista-com-marcador {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -749,6 +768,7 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
   color: var(--cor-texto-suave);
   line-height: 1;
 }
+.modal-fechar svg { width: 1em; height: 1em; }
 
 /* Painel de chamada (tempo real) */
 .painel-chamada-grid {

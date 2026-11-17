@@ -105,157 +105,231 @@
   </div>
 </div>
 
-<div class="card-branco">
-  <h3>Histórico de Internação</h3>
-  <div class="tabela-wrap">
-    <table class="tabela-padrao">
-      <thead>
-        <tr>
-          <th>Clínica</th>
-          <th>Enfermaria</th>
-          <th>Leito</th>
-          <th>Data Internação</th>
-          <th>Data Alta</th>
-          <th>Dias de Clínica</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for h in historico_leitos %}
-        <tr>
-          <td>{{ h.dsc_clinica or "-" }}</td>
-          <td>{{ h.dsc_enfermaria or "-" }}</td>
-          <td>{{ h.dsc_leito or "-" }}</td>
-          <td>{{ h.dat_internacao | data_br }}</td>
-          <td>{{ h.dat_alta | data_br }}</td>
-          <td>{{ h.dias_clinica }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="vazio-estado">Sem histórico de internação disponível para este prontuário.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="form-grid mt-16">
-    <div class="campo" style="display:flex; align-items:center; gap:10px;">
-      <label style="margin-bottom:0; white-space:nowrap;">Dias de Enfermaria</label>
-      <input type="number" min="0" id="input-dias-enfermaria"
-             value="{{ prontuario.dias_enfermaria if prontuario.dias_enfermaria is not none else dias_enfermaria_calc }}">
-    </div>
-    <div class="campo" style="display:flex; align-items:center; gap:10px;">
-      <label style="margin-bottom:0; white-space:nowrap;">Dias de UTI</label>
-      <input type="number" min="0" id="input-dias-uti"
-             value="{{ prontuario.dias_uti if prontuario.dias_uti is not none else dias_uti_calc }}">
-    </div>
-    <div class="campo" style="display:flex; align-items:center; gap:10px;">
-      <label style="margin-bottom:0; white-space:nowrap;">Diária de Acompanhante</label>
-      <input type="number" min="0" id="input-diaria-acompanhante"
-             value="{{ prontuario.diaria_acompanhante if prontuario.diaria_acompanhante is not none else dias_enfermaria_calc }}">
-    </div>
-    <div class="campo" style="display:flex; align-items:center;">
-      <button type="button" class="btn btn-primario" id="btn-salvar-valores-faturamento">Salvar Valores</button>
-    </div>
-  </div>
-</div>
-
-<div class="card-branco">
-  <h3>Resumo de Exames</h3>
-  {% for r in resumo_exames %}
-  <details class="secao-recolhivel" style="margin-bottom:10px;">
-    <summary><strong>{{ r.nome }}</strong> &middot; {{ r.quantidade }} exame(s)</summary>
-    <div class="tabela-wrap" style="margin-top:12px;">
-      <table class="tabela-padrao">
-        <thead>
-          <tr>
-            <th>Exame</th>
-            <th>Quantidade</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for ex in r.exames %}
-          <tr>
-            <td>{{ ex.nome }}</td>
-            <td>{{ ex.quantidade }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </details>
-  {% else %}
-  <p class="vazio-estado">Nenhum exame encontrado para esta internação.</p>
-  {% endfor %}
-</div>
-
+{% for comp in competencias %}
 <div class="card-branco">
   <details class="secao-recolhivel">
-    <summary><h3 style="display:inline;">Histórico de Exames</h3></summary>
-    <div class="tabela-wrap" style="margin-top:16px;">
-      <table class="tabela-padrao">
-        <thead>
-          <tr>
-            <th>Exame</th>
-            <th>Solicitante</th>
-            <th>Data de Solicitação</th>
-            <th>Profissional que Realizou</th>
-            <th>Data de Realização</th>
-            <th>Data de Agendamento</th>
-            <th>Data de Cancelamento</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for ex in exames %}
-          <tr>
-            <td>{{ ex.dsc_exame or "-" }}</td>
-            <td>{{ ex.solicitante_nome | profissional_br(ex.solicitante_conselho, ex.solicitante_num_conselho) }}</td>
-            <td>{{ ex.dat_solicitacao | data_br }}</td>
-            <td>{{ ex.realizacao_nome | profissional_br(ex.realizacao_conselho, ex.realizacao_num_conselho) }}</td>
-            <td>{{ ex.dat_realizacao | data_br }}</td>
-            <td>{{ ex.dat_agendamento | data_br }}</td>
-            <td>{{ ex.dat_cancelamento | data_br }}</td>
-          </tr>
+    <summary><h3 style="display:inline;">{{ comp.competencia }}</h3></summary>
+    <div style="margin-top:16px;">
+
+      <details class="secao-recolhivel" style="margin-bottom:10px;">
+        <summary><strong>Dias de Internação (Faturamento)</strong></summary>
+        <div class="form-grid mt-16">
+          <div class="campo" style="display:flex; align-items:center; gap:10px;">
+            <label style="margin-bottom:0; white-space:nowrap;">Dias de Enfermaria</label>
+            <input type="number" min="0" id="input-dias-enfermaria-{{ comp.chave }}" value="{{ comp.dias_enfermaria }}">
+          </div>
+          <div class="campo" style="display:flex; align-items:center; gap:10px;">
+            <label style="margin-bottom:0; white-space:nowrap;">Dias de UTI</label>
+            <input type="number" min="0" id="input-dias-uti-{{ comp.chave }}" value="{{ comp.dias_uti }}">
+          </div>
+          <div class="campo" style="display:flex; align-items:center; gap:10px;">
+            <label style="margin-bottom:0; white-space:nowrap;">Diária de Acompanhante</label>
+            <input type="number" min="0" id="input-diaria-acompanhante-{{ comp.chave }}" value="{{ comp.diaria_acompanhante }}">
+          </div>
+          <div class="campo" style="display:flex; align-items:center;">
+            <button type="button" class="btn btn-primario btn-salvar-valores-faturamento" data-competencia="{{ comp.chave }}">
+              Salvar Valores
+            </button>
+          </div>
+        </div>
+      </details>
+
+      <details class="secao-recolhivel" style="margin-bottom:10px;">
+        <summary><strong>Histórico de Internação</strong> &middot; {{ comp.historico_leitos | length }} registro(s)</summary>
+        <div class="tabela-wrap" style="margin-top:12px;">
+          <table class="tabela-padrao">
+            <thead>
+              <tr>
+                <th>Clínica</th>
+                <th>Enfermaria</th>
+                <th>Leito</th>
+                <th>Data Internação</th>
+                <th>Data Alta</th>
+                <th>Dias de Clínica</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for h in comp.historico_leitos %}
+              <tr>
+                <td>{{ h.dsc_clinica or "-" }}</td>
+                <td>{{ h.dsc_enfermaria or "-" }}</td>
+                <td>{{ h.dsc_leito or "-" }}</td>
+                <td>{{ h.dat_internacao | data_br }}</td>
+                <td>{{ h.dat_alta | data_br }}</td>
+                <td>{{ h.dias_clinica }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6" class="vazio-estado">Sem histórico de internação nesta competência.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details class="secao-recolhivel" style="margin-bottom:10px;">
+        <summary><strong>Resumo de Exames</strong> &middot; {{ comp.resumo_exames | length }} classificação(ões)</summary>
+        <div style="margin-top:12px; padding-left:8px;">
+          {% for r in comp.resumo_exames %}
+          <details class="secao-recolhivel" style="margin-bottom:10px;">
+            <summary><strong>{{ r.nome }}</strong> &middot; {{ r.quantidade }} exame(s)</summary>
+            <div class="tabela-wrap" style="margin-top:12px;">
+              <table class="tabela-padrao">
+                <thead>
+                  <tr>
+                    <th>Exame</th>
+                    <th>Quantidade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for ex in r.exames %}
+                  <tr>
+                    <td>{{ ex.nome }}</td>
+                    <td>{{ ex.quantidade }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
           {% else %}
-          <tr><td colspan="7" class="vazio-estado">Nenhum exame encontrado para esta internação.</td></tr>
+          <p class="vazio-estado">Nenhum exame encontrado nesta competência.</p>
           {% endfor %}
-        </tbody>
-      </table>
+        </div>
+      </details>
+
+      <details class="secao-recolhivel" style="margin-bottom:10px;">
+        <summary><strong>Histórico de Exames</strong> &middot; {{ comp.exames | length }} exame(s)</summary>
+        <div class="tabela-wrap" style="margin-top:12px;">
+          <table class="tabela-padrao">
+            <thead>
+              <tr>
+                <th>Exame</th>
+                <th>Solicitante</th>
+                <th>Data de Solicitação</th>
+                <th>Profissional que Realizou</th>
+                <th>Data de Realização</th>
+                <th>Data de Agendamento</th>
+                <th>Data de Cancelamento</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ex in comp.exames %}
+              <tr>
+                <td>{{ ex.dsc_exame or "-" }}</td>
+                <td>{{ ex.solicitante_nome | profissional_br(ex.solicitante_conselho, ex.solicitante_num_conselho) }}</td>
+                <td>{{ ex.dat_solicitacao | data_br }}</td>
+                <td>{{ ex.realizacao_nome | profissional_br(ex.realizacao_conselho, ex.realizacao_num_conselho) }}</td>
+                <td>{{ ex.dat_realizacao | data_br }}</td>
+                <td>{{ ex.dat_agendamento | data_br }}</td>
+                <td>{{ ex.dat_cancelamento | data_br }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7" class="vazio-estado">Nenhum exame encontrado nesta competência.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details class="secao-recolhivel" style="margin-bottom:10px;">
+        <summary><strong>Prescrições</strong> &middot; {{ comp.prescricoes | length }} prescrição(ões)</summary>
+        <div class="tabela-wrap" style="margin-top:12px;">
+          <table class="tabela-padrao">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Tipo</th>
+                <th>Profissional Solicitante</th>
+                <th>Profissional (Aprazamento)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in comp.prescricoes %}
+              <tr class="linha-clicavel linha-prescricao" title="Clique para ver os itens desta prescrição">
+                <td>{{ p.dat_prescricao | data_br }}</td>
+                <td>{{ p.tipo or "-" }}</td>
+                <td>{{ p.profissional_nome | profissional_br(p.profissional_conselho, p.profissional_num_conselho) }}</td>
+                <td>{{ p.aprazamento_nome | profissional_br(p.aprazamento_conselho, p.aprazamento_num_conselho) }}</td>
+              </tr>
+              <tr class="linha-itens-prescricao" style="display:none;">
+                <td colspan="4" style="background:#F7F9FA;">
+                  {% if p.itens %}
+                  <ul class="lista-com-marcador">
+                    {% for item in p.itens %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                  </ul>
+                  {% else %}
+                  <span class="texto-suave">Sem itens cadastrados para esta prescrição.</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4" class="vazio-estado">Nenhuma prescrição encontrada nesta competência.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details class="secao-recolhivel" style="margin-bottom:10px;">
+        <summary><strong>Procedimentos</strong> &middot; {{ comp.procedimentos | length }} procedimento(s)</summary>
+        <div style="margin-top:12px;">
+          <button class="btn btn-laranja btn-sm btn-incluir-procedimento"
+                  data-competencia="{{ comp.chave }}" data-competencia-rotulo="{{ comp.competencia }}" type="button">
+            {{ icons.icone('plus') }} Incluir Procedimento
+          </button>
+          <div class="tabela-wrap" style="margin-top:12px;">
+            <table class="tabela-padrao">
+              <thead>
+                <tr>
+                  <th>Código SIGTAP</th>
+                  <th>Descrição</th>
+                  <th>Quantidade</th>
+                  <th>Incluído em</th>
+                  <th>Incluído por</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for p in comp.procedimentos %}
+                <tr>
+                  <td><strong>{{ p.codigo }}</strong></td>
+                  <td>{{ p.descricao }}</td>
+                  <td>{{ p.quantidade }}</td>
+                  <td>{{ p.criado_em | data_br }}</td>
+                  <td>{{ p.usuario_nome or "-" }}</td>
+                  <td class="acoes-linha">
+                    <button class="btn btn-perigo btn-sm" onclick="excluirProcedimentoProntuario({{ p.id }})">Excluir</button>
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="vazio-estado">Nenhum procedimento incluído nesta competência.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
     </div>
   </details>
 </div>
-
+{% else %}
 <div class="card-branco">
-  <div class="flex-entre">
-    <h3>Procedimentos</h3>
-    <button class="btn btn-laranja btn-sm" id="btn-incluir-procedimento" type="button">
-      {{ icons.icone('plus') }} Incluir Procedimento
-    </button>
-  </div>
-  <div class="tabela-wrap">
-    <table class="tabela-padrao">
-      <thead>
-        <tr>
-          <th>Código SIGTAP</th>
-          <th>Descrição</th>
-          <th>Quantidade</th>
-          <th>Incluído em</th>
-          <th>Incluído por</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-procedimentos-analise">
-        <tr><td colspan="6" class="vazio-estado">Carregando...</td></tr>
-      </tbody>
-    </table>
-  </div>
+  <p class="vazio-estado">Sem dados de internação, exames, prescrições ou procedimentos para separar por competência.</p>
 </div>
+{% endfor %}
 
 <!-- Modal incluir procedimento -->
 <div class="modal-fundo" id="modal-incluir-procedimento">
   <div class="modal-caixa">
     <button class="modal-fechar" data-fechar-modal="modal-incluir-procedimento">{{ icons.icone('x') }}</button>
     <h3>Incluir Procedimento</h3>
+    <p class="texto-suave">Competência: <strong id="texto-competencia-procedimento">-</strong></p>
     <form id="form-incluir-procedimento">
       <input type="hidden" name="procedimento_id" id="input-procedimento-id">
+      <input type="hidden" name="competencia" id="input-competencia-procedimento">
       <div class="form-grid">
         <div class="campo" style="grid-column: 1 / -1;">
           <label>Procedimento *</label>
