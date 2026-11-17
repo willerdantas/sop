@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
     limparBuscaProfissional();
     carregarPrescricoesPendencia(PRONTUARIO_ID);
     carregarEvolucoesPendencia(PRONTUARIO_ID);
+    carregarExamesPendencia(PRONTUARIO_ID);
     abrirModal("modal-nova-pendencia");
   });
 

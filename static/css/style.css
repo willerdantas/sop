@@ -421,23 +421,32 @@ ul { list-style: none; margin: 0; padding: 0; }
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .topo-pagina h1 {
   font-size: 21px;
   color: var(--cor-teal-var);
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topo-pagina .subtitulo {
   font-size: 12.5px;
   color: var(--cor-texto-suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topo-pagina .topo-acoes {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-shrink: 0;
 }
 
 .topo-logo {
@@ -468,6 +477,14 @@ ul { list-style: none; margin: 0; padding: 0; }
   justify-content: center;
   font-size: 11px;
   font-weight: 700;
+  flex-shrink: 0;
+}
+
+.usuario-chip-nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
 }
 
 .area-pagina {
@@ -829,6 +846,19 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
 @media (max-width: 900px) {
   .topo-pagina { padding: 0 16px; }
   .area-pagina { padding: 18px 16px 32px; }
+}
+
+/* Celular: o logo grande e o nome do usuario nao cabem ao lado do titulo
+   da pagina - some o logo e deixa so o avatar do usuario (nome continua
+   disponivel pelo "title" ao tocar/segurar). */
+@media (max-width: 640px) {
+  :root { --altura-header: 72px; }
+  .topo-pagina { gap: 8px; }
+  .topo-pagina h1 { font-size: 16px; }
+  .topo-pagina .subtitulo { font-size: 11px; }
+  .topo-logo { display: none; }
+  .usuario-chip-nome { display: none; }
+  .usuario-chip { padding: 6px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

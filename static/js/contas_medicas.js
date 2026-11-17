@@ -47,7 +47,7 @@ async function carregarAguardando() {
     contador.textContent = `${aguardando.length} pendente(s)`;
 
     if (!aguardando.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhum prontuário aguardando confirmação.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário aguardando confirmação.</td></tr>`;
       return;
     }
 
@@ -56,6 +56,7 @@ async function carregarAguardando() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${esc(p.destino || "-")}</td>
         <td>${p.pendencias_abertas > 0
             ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
@@ -67,7 +68,7 @@ async function carregarAguardando() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -90,7 +91,7 @@ async function carregarContas() {
     document.getElementById("kpi-total-contas").textContent = lista.length;
 
     if (!confirmados.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário confirmado em Contas Médicas.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário confirmado em Contas Médicas.</td></tr>`;
       return;
     }
 
@@ -99,6 +100,7 @@ async function carregarContas() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${esc(p.destino || "-")}</td>
         <td>${p.pendencias_abertas > 0
             ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
@@ -111,7 +113,7 @@ async function carregarContas() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -133,7 +135,7 @@ async function carregarFaturamento() {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("pronto_faturamento").toString()}`);
     document.getElementById("kpi-total-faturamento").textContent = lista.length;
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhum prontuário pronto para faturamento.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário pronto para faturamento.</td></tr>`;
       return;
     }
 
@@ -142,6 +144,7 @@ async function carregarFaturamento() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${esc(p.destino || "-")}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${esc(p.faturamento_usuario_nome || "-")}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
@@ -156,7 +159,7 @@ async function carregarFaturamento() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -178,7 +181,7 @@ async function carregarFaturados() {
   try {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("finalizado").toString()}`);
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Nenhum prontuário faturado ainda.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhum prontuário faturado ainda.</td></tr>`;
       return;
     }
 
@@ -187,12 +190,13 @@ async function carregarFaturados() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${esc(p.destino || "-")}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${esc(p.finalizado_usuario_nome || "-")}</td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -228,7 +232,7 @@ async function carregarAuditoria() {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("auditoria").toString()}`);
     document.getElementById("kpi-total-auditoria").textContent = lista.length;
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário em auditoria.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário em auditoria.</td></tr>`;
       return;
     }
 
@@ -237,6 +241,7 @@ async function carregarAuditoria() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${esc(p.destino || "-")}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${esc(p.auditoria_analisado_em ? formatarData(p.auditoria_analisado_em) : "-")}</td>
         <td>${esc(p.auditoria_analisado_usuario_nome || "-")}</td>
@@ -250,7 +255,7 @@ async function carregarAuditoria() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

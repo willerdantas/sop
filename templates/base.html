@@ -123,9 +123,9 @@
         <span class="subtitulo">{% block subtitulo_pagina %}{% endblock %}</span>
       </div>
       <div class="topo-acoes">
-        <div class="usuario-chip" title="Clique para sair">
+        <div class="usuario-chip" title="{{ usuario_nome or '' }} · Clique para sair">
           <span class="avatar">{{ (usuario_nome or "U")[0]|upper }}</span>
-          <span>{{ usuario_nome }}</span>
+          <span class="usuario-chip-nome">{{ usuario_nome }}</span>
         </div>
         <img class="topo-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}"
              alt="Logo Hospital Municipal">

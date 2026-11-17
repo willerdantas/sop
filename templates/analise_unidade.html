@@ -171,9 +171,11 @@
         <thead>
           <tr>
             <th>Exame</th>
+            <th>Solicitante</th>
             <th>Data de Solicitação</th>
-            <th>Data de Agendamento</th>
+            <th>Profissional que Realizou</th>
             <th>Data de Realização</th>
+            <th>Data de Agendamento</th>
             <th>Data de Cancelamento</th>
           </tr>
         </thead>
@@ -181,13 +183,15 @@
           {% for ex in exames %}
           <tr>
             <td>{{ ex.dsc_exame or "-" }}</td>
+            <td>{{ ex.solicitante_nome | profissional_br(ex.solicitante_conselho, ex.solicitante_num_conselho) }}</td>
             <td>{{ ex.dat_solicitacao | data_br }}</td>
-            <td>{{ ex.dat_agendamento | data_br }}</td>
+            <td>{{ ex.realizacao_nome | profissional_br(ex.realizacao_conselho, ex.realizacao_num_conselho) }}</td>
             <td>{{ ex.dat_realizacao | data_br }}</td>
+            <td>{{ ex.dat_agendamento | data_br }}</td>
             <td>{{ ex.dat_cancelamento | data_br }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="5" class="vazio-estado">Nenhum exame encontrado para esta internação.</td></tr>
+          <tr><td colspan="7" class="vazio-estado">Nenhum exame encontrado para esta internação.</td></tr>
           {% endfor %}
         </tbody>
       </table>

@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS prontuarios (
     prioridade         VARCHAR(10) NOT NULL DEFAULT 'normal', -- normal, urgente
     localizacao_fisica VARCHAR(120),          -- prateleira/armario/setor onde esta fisicamente
     integra_isn_internacao_leito BIGINT UNIQUE, -- isn_internacao_leito de origem (altas ISIVITA), evita reimportar
+    destino             VARCHAR(60), -- dsc_destino da alta no sistema hospitalar (Residencia, Obito, etc.)
     recebido_contas_medicas_em TIMESTAMP, -- confirmacao de entrega ao chegar em contas_medicas (null = aguardando)
     recebido_contas_medicas_usuario_id INTEGER REFERENCES usuarios(id), -- quem confirmou a entrega
     recebido_unidade_em TIMESTAMP, -- confirmacao de entrega ao chegar na unidade vindo do SOP (null = aguardando)
@@ -147,6 +148,7 @@ CREATE TABLE IF NOT EXISTS prontuarios (
 
 ALTER TABLE prontuarios DROP CONSTRAINT IF EXISTS prontuarios_unidade_id_fkey;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS integra_isn_internacao_leito BIGINT UNIQUE;
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS destino VARCHAR(60);
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_contas_medicas_em TIMESTAMP;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_contas_medicas_usuario_id INTEGER REFERENCES usuarios(id);
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_unidade_em TIMESTAMP;

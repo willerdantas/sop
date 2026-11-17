@@ -146,6 +146,16 @@ def data_br(valor):
     return str(valor)
 
 
+def profissional_br(nome, conselho=None, numero=None):
+    """Nome do profissional com conselho entre parenteses (filtro
+    "profissional_br" dos templates), igual ao formato usado no JS
+    (profissionalComConselho)."""
+    if not nome:
+        return "-"
+    registro = " ".join(str(v) for v in (conselho, numero) if v)
+    return f"{nome} ({registro})" if registro else nome
+
+
 def primeiras_entradas_internacao(isns_internacao_leito):
     """{isn_internacao_leito: data do primeiro leito da internacao}. A data
     gravada no prontuario e a do ultimo leito; o tempo total de internacao
@@ -213,6 +223,7 @@ def create_app():
     configuracao_inicial.init_app(app, ao_conectar=_seed_admin)
 
     app.add_template_filter(data_br, "data_br")
+    app.add_template_filter(profissional_br, "profissional_br")
     register_routes(app)
     return app
 
@@ -354,6 +365,11 @@ def listar_prescricoes_internacao(isn_internacao):
         return []
     col_tipo = _primeira_coluna("t_tipo_prescricao", ("dsc_tipo_prescricao", "dsc_tipo"), prefixo="dsc_")
     col_apz = _primeira_coluna("t_prescricao_pep", ("isn_profissional_apz", "ian_profissional_apz"))
+    # dat_prescricao nao existe em todas as instalacoes: a data real da
+    # prescricao fica em dat_cadastro (confirmado via consulta direta ao
+    # schema deste hospital).
+    col_data = _primeira_coluna("t_prescricao_pep", ("dat_prescricao", "dat_cadastro")) or "dat_cadastro"
+    data_sql = psql.SQL("pr.{}").format(psql.Identifier(col_data))
     tipo_sql = psql.SQL("tp.{}").format(psql.Identifier(col_tipo)) if col_tipo else psql.SQL("NULL")
     if col_apz:
         apz_join = psql.SQL(
@@ -368,14 +384,14 @@ def listar_prescricoes_internacao(isn_internacao):
         apz_campos = psql.SQL("""NULL AS aprazamento_nome, NULL AS aprazamento_num_conselho,
                NULL AS aprazamento_conselho""")
     consulta = psql.SQL("""
-        SELECT pr.dat_prescricao, {tipo} AS tipo,
+        SELECT {data} AS dat_prescricao, {tipo} AS tipo,
                TRIM(prof.dsc_usuario) AS profissional_nome,
                TRIM(prof.num_conselho::text) AS profissional_num_conselho,
                TRIM(cprof.cod_conselho::text) AS profissional_conselho,
                {apz_campos},
                il.isn_clinica, c.dsc_clinica, e.dsc_enfermaria, l.dsc_leito
         FROM t_prescricao_pep pr
-        LEFT JOIN t_tipo_prescricao tp ON tp.isn_tipo_prescricao = pr.isn_tipo_prescricao
+        LEFT JOIN t_tipo_prescricao tp ON tp.isn_tipo_prescricao = pr.isn_prescricao_tipo
         LEFT JOIN t_profissional prof ON prof.isn_usuario = pr.isn_profissional
         LEFT JOIN t_conselho cprof ON cprof.isn_conselho = prof.isn_conselho
         {apz_join}
@@ -384,8 +400,8 @@ def listar_prescricoes_internacao(isn_internacao):
         LEFT JOIN t_enfermaria e ON e.isn_enfermaria = il.isn_enfermaria
         LEFT JOIN t_leito l ON l.isn_leito = il.isn_leito
         WHERE pr.isn_internacao = %s AND pr.dat_cancelamento IS NULL
-        ORDER BY pr.dat_prescricao DESC
-        LIMIT 1000""").format(tipo=tipo_sql, apz_campos=apz_campos, apz_join=apz_join)
+        ORDER BY {data} DESC
+        LIMIT 1000""").format(data=data_sql, tipo=tipo_sql, apz_campos=apz_campos, apz_join=apz_join)
     rows = db.query_integra(consulta, (isn_internacao,))
     for r in rows:
         r["isn_clinica"] = int(r["isn_clinica"]) if r["isn_clinica"] is not None else None
@@ -606,36 +622,75 @@ def calcular_idade(nascimento, referencia):
 
 
 def listar_exames_internacao(isn_internacao):
-    """Exames solicitados durante a internacao: t_internacao join t_exame_solic
-    (por isn_internacao) join t_exame (por isn_exame) para o nome do exame."""
+    """Exames solicitados durante a internacao (por isn_internacao), com o
+    nome do exame, solicitante e profissional que realizou (nome, conselho
+    e numero)."""
     if not isn_internacao:
         return []
     return db.query_integra(
         """SELECT es.isn_exame, ex.dsc_exame,
                   es.dat_solicitacao, es.dat_agendamento,
-                  es.dat_realizacao, es.dat_cancelamento
-           FROM t_internacao i
-           JOIN t_exame_solic es ON es.isn_internacao = i.isn_internacao
+                  es.dat_realizacao, es.dat_cancelamento,
+                  TRIM(sol.dsc_usuario) AS solicitante_nome,
+                  TRIM(sol.num_conselho::text) AS solicitante_num_conselho,
+                  TRIM(csol.cod_conselho::text) AS solicitante_conselho,
+                  TRIM(real.dsc_usuario) AS realizacao_nome,
+                  TRIM(real.num_conselho::text) AS realizacao_num_conselho,
+                  TRIM(creal.cod_conselho::text) AS realizacao_conselho
+           FROM t_exame_solic es
            LEFT JOIN t_exame ex ON ex.isn_exame = es.isn_exame
-           WHERE i.isn_internacao = %s
+           LEFT JOIN t_profissional sol ON sol.isn_usuario = es.isn_profissional
+           LEFT JOIN t_conselho csol ON csol.isn_conselho = sol.isn_conselho
+           LEFT JOIN t_profissional real ON real.isn_usuario = es.isn_prof_realizou
+           LEFT JOIN t_conselho creal ON creal.isn_conselho = real.isn_conselho
+           WHERE es.isn_internacao = %s
            ORDER BY es.dat_solicitacao DESC""",
         (isn_internacao,)
     )
 
 
-def resumir_exames_por_classificacao(exames):
-    """Agrupa a lista de exames pela classificacao cadastrada em
-    exame_classificacao (local, por isn_exame). Dentro de cada classificacao,
-    resume por nome de exame, contando quantas vezes cada um aparece no
-    historico (sem trazer datas individuais)."""
-    isn_exames = [int(ex["isn_exame"]) for ex in exames if ex.get("isn_exame") is not None]
-    mapa_classificacao = {}
-    if isn_exames:
-        rows = db.query(
-            "SELECT isn_exame, classificacao FROM exame_classificacao WHERE isn_exame = ANY(%s)",
-            (isn_exames,)
+def listar_exames_pendencia_internacao(isn_internacao):
+    """Exames (nao cancelados) da internacao, com classificacao, para
+    preencher o registro de pendencia (ver listar_exames_internacao, que ja
+    traz solicitante e profissional que realizou)."""
+    exames = [ex for ex in listar_exames_internacao(isn_internacao) if not ex.get("dat_cancelamento")]
+    mapa = mapa_classificacao_exames(ex.get("isn_exame") for ex in exames)
+    for ex in exames:
+        isn = ex.get("isn_exame")
+        ex["classificacao"] = mapa.get(int(isn)) if isn is not None else None
+    return exames
+
+
+def mapa_classificacao_exames(isns_exame):
+    """{isn_exame: nome da classificacao}, lido de painel.exame_classificacao
+    + painel.classificacao_exame (schema separado, no mesmo banco do sistema
+    hospitalar). E so um rotulo informativo: se o schema painel nao existir
+    ou faltar permissao de leitura, degrada para 'sem classificacao' em vez
+    de quebrar a tela de exames."""
+    isns = sorted({int(i) for i in isns_exame if i is not None})
+    if not isns:
+        return {}
+    try:
+        rows = db.query_integra(
+            """SELECT ec.isn_exame, ce.nome
+               FROM painel.exame_classificacao ec
+               JOIN painel.classificacao_exame ce ON ce.id = ec.classificacao_id
+               WHERE ec.isn_exame = ANY(%s)""",
+            (isns,)
         )
-        mapa_classificacao = {r["isn_exame"]: r["classificacao"] for r in rows}
+    except ERROS_TABELA_OPCIONAL as exc:
+        print(f"[aviso] classificacao de exames indisponivel: {exc.pgerror or exc}".strip())
+        return {}
+    return {int(r["isn_exame"]): r["nome"] for r in rows}
+
+
+def resumir_exames_por_classificacao(exames):
+    """Agrupa a lista de exames pela classificacao (ver
+    mapa_classificacao_exames). Dentro de cada classificacao, resume por
+    nome de exame, contando quantas vezes cada um aparece no historico
+    (sem trazer datas individuais)."""
+    isn_exames = [ex.get("isn_exame") for ex in exames]
+    mapa_classificacao = mapa_classificacao_exames(isn_exames)
 
     grupos = {}
     for ex in exames:
@@ -967,6 +1022,7 @@ ENDPOINT_PARA_PAGINAS = {
     "api_confirmar_recebimento_sop": ("sop",),
     "api_prescricoes_prontuario": ("sop", "contas_medicas"),
     "api_evolucoes_prontuario": ("sop", "contas_medicas"),
+    "api_exames_pendencia_prontuario": ("sop", "contas_medicas"),
     "api_confirmar_recebimento_prontuario": ("contas_medicas",),
     "api_editar_valores_faturamento": ("contas_medicas",),
     "api_registrar_analise_auditoria": ("contas_medicas",),
@@ -1705,6 +1761,22 @@ def register_routes(app):
         except ERROS_INTEGRA_LENTO as exc:
             return resposta_consulta_lenta("Evolucoes", exc)
 
+    @app.route("/api/prontuarios/<int:prontuario_id>/exames-pendencia", methods=["GET"])
+    @login_required
+    def api_exames_pendencia_prontuario(prontuario_id):
+        """Exames da internacao do prontuario, para preencher o registro
+        de pendencia (ver listar_exames_pendencia_internacao)."""
+        atual, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
+        isn_internacao, _ = historico_internacao(atual.get("integra_isn_internacao_leito"))
+        try:
+            return jsonify(listar_exames_pendencia_internacao(isn_internacao))
+        except ERROS_TABELA_OPCIONAL as exc:
+            return resposta_tabela_indisponivel("Exames", exc)
+        except ERROS_INTEGRA_LENTO as exc:
+            return resposta_consulta_lenta("Exames", exc)
+
     @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento-sop", methods=["POST"])
     @login_required
     def api_confirmar_recebimento_sop(prontuario_id):
@@ -1828,15 +1900,15 @@ def register_routes(app):
                 """INSERT INTO prontuarios
                     (numero_prontuario, paciente_nome, unidade_id, data_internacao,
                      data_alta, prioridade, localizacao_fisica, status_atual,
-                     integra_isn_internacao_leito)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,'sop',%s)
+                     integra_isn_internacao_leito, destino)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,'sop',%s,%s)
                    RETURNING *""",
                 (
                     numero_prontuario, alta["paciente_nome"],
                     int(alta["isn_clinica"]) if alta["isn_clinica"] is not None else None,
                     alta["dat_internacao"], alta["dat_alta"],
                     prioridade, localizacao,
-                    isn_internacao_leito,
+                    isn_internacao_leito, alta["dsc_destino"],
                 )
             )
             db.execute(

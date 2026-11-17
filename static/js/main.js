@@ -429,13 +429,27 @@ async function enviarProntuarioParaUnidade(prontuarioId, aoConcluir) {
 }
 
 /* ---------------------------------------------------------
- * PRESCRICOES E EVOLUCOES NO REGISTRO DE PENDENCIA (Analise SOP e Contas Medicas)
- * Duas listas suspensas com as prescricoes (nao canceladas) e as evolucoes
- * da internacao. So uma origem por pendencia: escolher uma prescricao limpa
- * a evolucao e vice-versa. A escolha preenche unidade, profissional, data e
- * um resumo no inicio da descricao.
+ * PRESCRICOES, EVOLUCOES E EXAMES NO REGISTRO DE PENDENCIA (Analise SOP e
+ * Contas Medicas). Tres listas suspensas (nao canceladas) da internacao.
+ * So uma origem por pendencia: escolher uma limpa e desabilita as outras
+ * duas. A escolha preenche unidade (quando disponivel), profissional, data
+ * e um resumo no inicio da descricao.
  * --------------------------------------------------------- */
-const ORIGENS_PENDENCIA = { prescricoes: null, evolucoes: null };
+const ORIGENS_PENDENCIA = { prescricoes: null, evolucoes: null, exames: null };
+
+/** Uma entrada por select: chave em ORIGENS_PENDENCIA e como montar os
+ * dados para preencherPendencia() a partir do item escolhido. */
+const CONFIG_SELECTS_PENDENCIA = [
+  { id: "select-prescricao-pendencia", chave: "prescricoes",
+    montar: (p) => ({ isnClinica: p.isn_clinica, dataHora: p.dat_prescricao,
+                       profissionalNome: p.profissional_nome, resumo: resumoPrescricao(p) }) },
+  { id: "select-evolucao-pendencia", chave: "evolucoes",
+    montar: (ev) => ({ isnClinica: ev.isn_clinica, dataHora: ev.dat_cadastro,
+                        profissionalNome: ev.profissional_nome, resumo: resumoEvolucao(ev) }) },
+  { id: "select-exame-pendencia", chave: "exames",
+    montar: (ex) => ({ isnClinica: null, dataHora: ex.dat_solicitacao,
+                        profissionalNome: ex.solicitante_nome, resumo: resumoExame(ex) }) },
+];
 
 function profissionalComConselho(nome, conselho, numero) {
   if (!nome) return "-";
@@ -457,6 +471,14 @@ function resumoEvolucao(ev) {
     `Evolução de ${formatarData(ev.dat_cadastro)}`,
     `Profissional: ${profissionalComConselho(ev.profissional_nome, ev.profissional_conselho, ev.profissional_num_conselho)}`,
     `Clínica: ${ev.dsc_clinica || "-"}`,
+  ].join(" | ");
+}
+
+function resumoExame(ex) {
+  return [
+    `Exame ${ex.dsc_exame || ""}${ex.classificacao ? ` (${ex.classificacao})` : ""} solicitado em ${formatarData(ex.dat_solicitacao)}`,
+    `Solicitante: ${profissionalComConselho(ex.solicitante_nome, ex.solicitante_conselho, ex.solicitante_num_conselho)}`,
+    `Realização: ${profissionalComConselho(ex.realizacao_nome, ex.realizacao_conselho, ex.realizacao_num_conselho)}`,
   ].join(" | ");
 }
 
@@ -493,6 +515,22 @@ async function carregarListaPendencia(selectId, chave, url, vazio, rotulo) {
     select.appendChild(opt);
     select.disabled = true;
   }
+  atualizarDisponibilidadeSelectsPendencia();
+}
+
+/** So uma origem por pendencia: enquanto uma lista estiver com algo
+ * escolhido, as outras ficam desabilitadas (alem de limpas), para a regra
+ * ficar visivel e nao so "silenciosa" ao trocar de escolha. */
+function atualizarDisponibilidadeSelectsPendencia() {
+  const selects = CONFIG_SELECTS_PENDENCIA
+    .map((cfg) => document.getElementById(cfg.id))
+    .filter(Boolean);
+  if (!selects.length) return;
+  const algumEscolhido = selects.some((s) => s.value !== "");
+  selects.forEach((sel, i) => {
+    const temItens = (ORIGENS_PENDENCIA[CONFIG_SELECTS_PENDENCIA[i].chave] || []).length > 0;
+    sel.disabled = !temItens || (algumEscolhido && sel.value === "");
+  });
 }
 
 function carregarPrescricoesPendencia(prontuarioId) {
@@ -518,26 +556,39 @@ function carregarEvolucoesPendencia(prontuarioId) {
              ev.dsc_clinica].filter(Boolean).join(" · "));
 }
 
-/** Liga (uma vez) os eventos das duas listas: so uma origem por pendencia. */
-function ligarSelectsPendencia() {
-  const selPresc = document.getElementById("select-prescricao-pendencia");
-  const selEvol = document.getElementById("select-evolucao-pendencia");
-  if (!selPresc || !selEvol || selPresc.dataset.ligado) return;
-  selPresc.dataset.ligado = "1";
+function carregarExamesPendencia(prontuarioId) {
+  ligarSelectsPendencia();
+  return carregarListaPendencia(
+    "select-exame-pendencia", "exames",
+    `/api/prontuarios/${encodeURIComponent(prontuarioId)}/exames-pendencia`,
+    "Nenhum exame (não cancelado) nesta internação",
+    (ex) => [formatarData(ex.dat_solicitacao), ex.dsc_exame || "Exame", ex.classificacao,
+             profissionalComConselho(ex.solicitante_nome, ex.solicitante_conselho, ex.solicitante_num_conselho)]
+      .filter(Boolean).join(" · "));
+}
 
-  selPresc.addEventListener("change", () => {
-    selEvol.value = "";
-    const p = selPresc.value === "" ? null : (ORIGENS_PENDENCIA.prescricoes || [])[Number(selPresc.value)];
-    if (!p) { removerResumoPendencia(); return; }
-    preencherPendencia({ isnClinica: p.isn_clinica, dataHora: p.dat_prescricao,
-                         profissionalNome: p.profissional_nome, resumo: resumoPrescricao(p) });
-  });
-  selEvol.addEventListener("change", () => {
-    selPresc.value = "";
-    const ev = selEvol.value === "" ? null : (ORIGENS_PENDENCIA.evolucoes || [])[Number(selEvol.value)];
-    if (!ev) { removerResumoPendencia(); return; }
-    preencherPendencia({ isnClinica: ev.isn_clinica, dataHora: ev.dat_cadastro,
-                         profissionalNome: ev.profissional_nome, resumo: resumoEvolucao(ev) });
+/** Liga (uma vez) os eventos das listas: so uma origem por pendencia. */
+function ligarSelectsPendencia() {
+  const selects = CONFIG_SELECTS_PENDENCIA
+    .map((cfg) => document.getElementById(cfg.id))
+    .filter(Boolean);
+  if (!selects.length || selects[0].dataset.ligado) return;
+  selects.forEach((sel) => { sel.dataset.ligado = "1"; });
+
+  CONFIG_SELECTS_PENDENCIA.forEach((cfg) => {
+    const sel = document.getElementById(cfg.id);
+    if (!sel) return;
+    sel.addEventListener("change", () => {
+      CONFIG_SELECTS_PENDENCIA.forEach((outro) => {
+        if (outro.id === cfg.id) return;
+        const outroSel = document.getElementById(outro.id);
+        if (outroSel) outroSel.value = "";
+      });
+      atualizarDisponibilidadeSelectsPendencia();
+      const item = sel.value === "" ? null : (ORIGENS_PENDENCIA[cfg.chave] || [])[Number(sel.value)];
+      if (!item) { removerResumoPendencia(); return; }
+      preencherPendencia(cfg.montar(item));
+    });
   });
 }
 
