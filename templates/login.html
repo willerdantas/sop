@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Entrar · Sistema de Prontuários HM</title>
-<link rel="preload" as="image" href="{{ url_for('static', filename='img/logo-hm-nova.png') }}">
+<link rel="preload" as="image" href="{{ url_for('static', filename='img/' + logo_carregamento) }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -18,7 +18,7 @@
 <div id="loading-overlay">
   <div class="loading-logo-wrap">
     <span class="loading-ring"></span>
-    <img class="loading-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}"
+    <img class="loading-logo" src="{{ url_for('static', filename='img/' + logo_carregamento) }}"
          alt="Carregando">
   </div>
   <p class="loading-texto">Carregando...</p>
@@ -26,7 +26,7 @@
 
 <div class="pagina-login">
   <div class="login-card">
-    <img class="login-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}"
+    <img class="login-logo" src="{{ url_for('static', filename='img/' + logo_paginas) }}"
          alt="Logo Hospital Municipal">
 
     <h1>Controle de Prontuários Físicos</h1>

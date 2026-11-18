@@ -12,4 +12,32 @@
   </p>
   {% include "_form_banco.html" %}
 </div>
+
+<div class="card-branco" style="margin-top:20px;">
+  <h3>Logotipo do Sistema</h3>
+  <p class="texto-suave mb-16">
+    Duas logos independentes: uma para o cabeçalho das páginas e os relatórios, outra para a tela
+    de carregamento entre páginas. Pode levar um restart do sistema para valer em todos os processos.
+  </p>
+  <form method="POST" action="{{ url_for('configuracao.logos') }}" enctype="multipart/form-data" data-nav-loading>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <div class="campo">
+        <label>Logo das páginas e relatórios</label>
+        <img src="{{ url_for('static', filename='img/' + logo_paginas) }}" alt="Logo atual"
+             style="max-height:48px; display:block; margin-bottom:8px;">
+        <input type="file" name="logo_paginas" accept=".png,.jpg,.jpeg,.svg,.webp">
+      </div>
+      <div class="campo">
+        <label>Logo da tela de carregamento</label>
+        <img src="{{ url_for('static', filename='img/' + logo_carregamento) }}" alt="Logo atual"
+             style="max-height:48px; display:block; margin-bottom:8px;">
+        <input type="file" name="logo_carregamento" accept=".png,.jpg,.jpeg,.svg,.webp">
+      </div>
+    </div>
+    <div class="form-acoes">
+      <button type="submit" class="btn btn-primario" style="width:auto;">Salvar Logo(s)</button>
+    </div>
+  </form>
+</div>
 {% endblock %}

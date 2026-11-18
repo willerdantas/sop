@@ -21,14 +21,14 @@
 <div id="loading-overlay">
   <div class="loading-logo-wrap">
     <span class="loading-ring"></span>
-    <img class="loading-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}" alt="Carregando">
+    <img class="loading-logo" src="{{ url_for('static', filename='img/' + logo_carregamento) }}" alt="Carregando">
   </div>
   <p class="loading-texto">Carregando...</p>
 </div>
 
 <div class="pagina-login">
   <div class="login-card {% if etapa == 'banco' %}config-banco{% endif %}">
-    <img class="login-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}"
+    <img class="login-logo" src="{{ url_for('static', filename='img/' + logo_paginas) }}"
          alt="Logo Hospital Municipal">
 
     {% if etapa == 'criar_senha' %}

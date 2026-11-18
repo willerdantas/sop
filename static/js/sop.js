@@ -75,7 +75,7 @@ async function carregarSOP() {
     renderizarTabela(lista);
     atualizarKpis(lista);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -105,7 +105,7 @@ async function buscarInternacoesPorProntuario() {
         <td>${esc(i.paciente_nome)}</td>
         <td>${esc(formatarDataSimples(i.dat_internacao))}</td>
         <td>${i.dat_alta ? formatarDataSimples(i.dat_alta) : '<span class="texto-suave">em andamento</span>'}</td>
-        <td>${i.dsc_destino ? `<span class="badge ${esc(DESTINO_BADGE_CLASSE[i.dsc_destino] || "badge-unidade")}">${esc(i.dsc_destino)}</span>` : "-"}</td>
+        <td>${badgeDestino(i.dsc_destino)}</td>
         <td>${esc(i.dsc_motivo_alta || "-")}</td>
         <td class="acoes-linha">
           ${i.status_atual
@@ -136,7 +136,7 @@ async function registrarInternacao(isnInternacaoLeito) {
 function renderizarTabela(lista) {
   const tbody = document.getElementById("tbody-sop");
   if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="10" class="vazio-estado">Nenhum prontuário no SOP no momento.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="vazio-estado">Nenhum prontuário no SOP no momento.</td></tr>`;
     return;
   }
 
@@ -145,6 +145,7 @@ function renderizarTabela(lista) {
       <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
       <td>${esc(p.paciente_nome)}</td>
       <td>${esc(p.unidade_nome || "-")}</td>
+      <td>${badgeDestino(p.destino)}</td>
       <td>${p.prioridade === "urgente" ? '<span class="badge badge-pendencia">Urgente</span>' : "Normal"}</td>
       <td>${esc(p.localizacao_fisica || "-")}</td>
       <td>${p.pendencias_abertas > 0
@@ -185,12 +186,6 @@ async function enviarParaContasMedicas(id, pendenciasAbertas) {
     alert(e.message);
   }
 }
-
-const DESTINO_BADGE_CLASSE = {
-  "Residência": "badge-ok",
-  "Outro hospital": "badge-media",
-  "Óbito": "badge-pendencia",
-};
 
 function formatarHorasTexto(horas) {
   if (horas === null || horas === undefined) return "-";
@@ -321,7 +316,7 @@ async function carregarDevolvidos() {
     const lista = await apiFetch(`/api/prontuarios?status=sop&aguardando_sop=1`);
     document.getElementById("total-devolvidos").textContent = lista.length;
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário devolvido aguardando recebimento.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário devolvido aguardando recebimento.</td></tr>`;
       return;
     }
     const ORIGEM = { unidade: "Unidade", contas_medicas: "Contas Médicas" };
@@ -331,6 +326,7 @@ async function carregarDevolvidos() {
         <td>${esc(p.paciente_nome)}</td>
         <td><span class="badge badge-media">${esc(ORIGEM[p.devolvido_sop_por] || p.devolvido_sop_por || "-")}</span></td>
         <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${badgeDestino(p.destino)}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td>${p.pendencias_abertas > 0
             ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
@@ -342,7 +338,7 @@ async function carregarDevolvidos() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -362,7 +358,7 @@ async function carregarEnviadosUnidade() {
   try {
     const lista = await apiFetch(`/api/prontuarios?status=unidade`);
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário enviado para a Unidade.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário enviado para a Unidade.</td></tr>`;
       return;
     }
     // Quem esta ha mais tempo na unidade aparece primeiro.
@@ -373,6 +369,7 @@ async function carregarEnviadosUnidade() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${badgeDestino(p.destino)}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td>${formatarTimerHorasUteis(p.horas_uteis_desde_envio_unidade)}</td>
         <td>${p.recebido_unidade_em
@@ -385,7 +382,7 @@ async function carregarEnviadosUnidade() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -394,7 +391,7 @@ async function carregarEnviadosContas() {
   try {
     const lista = await apiFetch(`/api/prontuarios?status=contas_medicas`);
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Nenhum prontuário enviado para Contas Médicas ainda.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhum prontuário enviado para Contas Médicas ainda.</td></tr>`;
       return;
     }
 
@@ -403,6 +400,7 @@ async function carregarEnviadosContas() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${badgeDestino(p.destino)}</td>
         <td>${p.pendencias_abertas > 0
             ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
@@ -410,6 +408,6 @@ async function carregarEnviadosContas() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }

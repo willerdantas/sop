@@ -28,11 +28,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-const DESTINO_BADGE_CLASSE_CONTAS = {
-  "Residência": "badge-ok",
-  "Outro hospital": "badge-media",
-  "Óbito": "badge-pendencia",
-};
 
 async function buscarInternacoesPorProntuarioContas() {
   const numero = document.getElementById("busca-numero-prontuario-contas").value.trim();
@@ -53,7 +48,7 @@ async function buscarInternacoesPorProntuarioContas() {
         <td>${esc(i.paciente_nome)}</td>
         <td>${esc(formatarDataSimples(i.dat_internacao))}</td>
         <td>${i.dat_alta ? formatarDataSimples(i.dat_alta) : '<span class="texto-suave">em andamento</span>'}</td>
-        <td>${i.dsc_destino ? `<span class="badge ${esc(DESTINO_BADGE_CLASSE_CONTAS[i.dsc_destino] || "badge-unidade")}">${esc(i.dsc_destino)}</span>` : "-"}</td>
+        <td>${badgeDestino(i.dsc_destino)}</td>
         <td>${esc(i.dsc_motivo_alta || "-")}</td>
         <td class="acoes-linha">
           ${i.status_atual
@@ -121,7 +116,7 @@ async function carregarAguardando() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
-        <td>${esc(p.destino || "-")}</td>
+        <td>${badgeDestino(p.destino)}</td>
         <td>${p.pendencias_abertas > 0
             ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
@@ -165,7 +160,7 @@ async function carregarContas() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
-        <td>${esc(p.destino || "-")}</td>
+        <td>${badgeDestino(p.destino)}</td>
         <td>${p.pendencias_abertas > 0
             ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
             : `<span class="badge badge-ok">Sem pendência</span>`}</td>
@@ -209,7 +204,7 @@ async function carregarFaturamento() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
-        <td>${esc(p.destino || "-")}</td>
+        <td>${badgeDestino(p.destino)}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${esc(p.faturamento_usuario_nome || "-")}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
@@ -255,7 +250,7 @@ async function carregarFaturados() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
-        <td>${esc(p.destino || "-")}</td>
+        <td>${badgeDestino(p.destino)}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${esc(p.finalizado_usuario_nome || "-")}</td>
       </tr>
@@ -306,7 +301,7 @@ async function carregarAuditoria() {
         <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
-        <td>${esc(p.destino || "-")}</td>
+        <td>${badgeDestino(p.destino)}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${esc(p.auditoria_analisado_em ? formatarData(p.auditoria_analisado_em) : "-")}</td>
         <td>${esc(p.auditoria_analisado_usuario_nome || "-")}</td>

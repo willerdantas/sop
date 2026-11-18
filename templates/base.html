@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{% block titulo %}Sistema de Prontuários{% endblock %} · HM</title>
-<link rel="preload" as="image" href="{{ url_for('static', filename='img/logo-hm-nova.png') }}">
+<link rel="preload" as="image" href="{{ url_for('static', filename='img/' + logo_carregamento) }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 {% block head_extra %}{% endblock %}
 </head>
@@ -22,7 +22,7 @@
 <div id="loading-overlay">
   <div class="loading-logo-wrap">
     <span class="loading-ring"></span>
-    <img class="loading-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}"
+    <img class="loading-logo" src="{{ url_for('static', filename='img/' + logo_carregamento) }}"
          alt="Carregando">
   </div>
   <p class="loading-texto">Carregando...</p>
@@ -127,7 +127,7 @@
           <span class="avatar">{{ (usuario_nome or "U")[0]|upper }}</span>
           <span class="usuario-chip-nome">{{ usuario_nome }}</span>
         </div>
-        <img class="topo-logo" src="{{ url_for('static', filename='img/logo-hm-nova.png') }}"
+        <img class="topo-logo" src="{{ url_for('static', filename='img/' + logo_paginas) }}"
              alt="Logo Hospital Municipal">
       </div>
     </header>

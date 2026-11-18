@@ -140,6 +140,19 @@ function argJs(valor) {
   return esc(JSON.stringify(valor === undefined ? null : valor));
 }
 
+/** Etiqueta colorida do destino da alta (Residência, Outro hospital,
+ * Óbito), no mesmo padrao usado na lista de Altas do SOP. */
+const DESTINO_BADGE_CLASSE = {
+  "Residência": "badge-ok",
+  "Outro hospital": "badge-media",
+  "Óbito": "badge-pendencia",
+};
+
+function badgeDestino(destino) {
+  if (!destino) return "-";
+  return `<span class="badge ${DESTINO_BADGE_CLASSE[destino] || "badge-unidade"}">${esc(destino)}</span>`;
+}
+
 function tokenCsrf() {
   const meta = document.querySelector('meta[name="csrf-token"]');
   return meta ? meta.getAttribute("content") : "";

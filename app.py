@@ -849,17 +849,13 @@ def mapa_classificacao_exames(isns_exame):
 
 
 def resumir_exames_por_classificacao(exames):
-    """Agrupa a lista de exames pela classificacao (ver
-    mapa_classificacao_exames). Dentro de cada classificacao, resume por
-    nome de exame, contando quantas vezes cada um aparece no historico
-    (sem trazer datas individuais)."""
-    isn_exames = [ex.get("isn_exame") for ex in exames]
-    mapa_classificacao = mapa_classificacao_exames(isn_exames)
-
+    """Agrupa a lista de exames (ja com 'classificacao' anexada por quem
+    chamou, ver mapa_classificacao_exames) pela classificacao. Dentro de
+    cada classificacao, resume por nome de exame, contando quantas vezes
+    cada um aparece no historico (sem trazer datas individuais)."""
     grupos = {}
     for ex in exames:
-        isn = int(ex["isn_exame"]) if ex.get("isn_exame") is not None else None
-        classificacao = mapa_classificacao.get(isn) or "Sem classificação"
+        classificacao = ex.get("classificacao") or "Sem classificação"
         nome_exame = ex["dsc_exame"] or "Sem nome"
         contagem_exames = grupos.setdefault(classificacao, {})
         contagem_exames[nome_exame] = contagem_exames.get(nome_exame, 0) + 1
@@ -1177,6 +1173,7 @@ ENDPOINT_PARA_PAGINAS = {
     "analise_prontuario": ("sop",),
     "analise_unidade_prontuario": ("unidade",),
     "analise_c_medicas_prontuario": ("contas_medicas",),
+    "relatorio_competencia_contas_medicas": ("contas_medicas",),
     "api_listar_prontuarios": ("sop", "unidade", "contas_medicas"),
     "api_obter_prontuario": ("sop", "unidade", "contas_medicas"),
     "api_buscar_internacoes_prontuario": ("sop", "contas_medicas"),
@@ -1540,6 +1537,10 @@ def register_routes(app):
         anexar_unidade_nome(prontuario)
         isn_internacao, historico_leitos = historico_internacao(prontuario.get("integra_isn_internacao_leito"))
         exames = listar_exames_internacao(isn_internacao)
+        mapa_classif_exames = mapa_classificacao_exames(ex.get("isn_exame") for ex in exames)
+        for ex in exames:
+            isn = ex.get("isn_exame")
+            ex["classificacao"] = mapa_classif_exames.get(int(isn)) if isn is not None else None
         resumo_exames = resumir_exames_por_classificacao(exames)
         try:
             prescricoes = listar_prescricoes_internacao(isn_internacao)
@@ -1647,6 +1648,34 @@ def register_routes(app):
             return redirect(url_for("contas_medicas"))
         iniciar_analise(prontuario_id, "contas_medicas")
         return render_template("analise_c_medicas.html", active_page="contas_medicas", **contexto)
+
+    @app.route("/analise_c_medicas/<int:prontuario_id>/relatorio/<competencia>")
+    @login_required
+    def relatorio_competencia_contas_medicas(prontuario_id, competencia):
+        if not COMPETENCIA_VALIDA.match(competencia):
+            flash("Competência inválida.", "erro")
+            return redirect(url_for("analise_c_medicas_prontuario", prontuario_id=prontuario_id))
+        contexto = montar_contexto_analise(prontuario_id, "contas_medicas")
+        if contexto is None:
+            return redirect(url_for("contas_medicas"))
+        comp = next((c for c in contexto["competencias"] if c["chave"] == competencia), None)
+        if comp is None:
+            flash("Não há dados para essa competência.", "erro")
+            return redirect(url_for("analise_c_medicas_prontuario", prontuario_id=prontuario_id))
+
+        exames_sem_laboratorio = [
+            ex for ex in comp["exames"]
+            if not (ex.get("classificacao") and "laborat" in ex["classificacao"].lower())
+        ]
+
+        return render_template(
+            "relatorio_competencia.html",
+            prontuario=contexto["prontuario"], cids=contexto["cids"],
+            dat_nascimento=contexto["dat_nascimento"], idade=contexto["idade"],
+            dsc_mae=contexto["dsc_mae"], num_cpf=contexto["num_cpf"], num_cns=contexto["num_cns"],
+            comp=comp, exames_sem_laboratorio=exames_sem_laboratorio,
+            gerado_em=agora_local(),
+        )
 
     @app.route("/painel")
     @login_required
@@ -2208,15 +2237,15 @@ def register_routes(app):
                 """INSERT INTO prontuarios
                     (numero_prontuario, paciente_nome, unidade_id, data_internacao,
                      data_alta, prioridade, localizacao_fisica, status_atual,
-                     integra_isn_internacao_leito)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,'sop',%s)
+                     integra_isn_internacao_leito, destino)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,'sop',%s,%s)
                    RETURNING *""",
                 (
                     numero_prontuario, internacao["paciente_nome"],
                     unidade_internacao,
                     internacao["dat_internacao"], internacao["dat_alta"],
                     prioridade, localizacao,
-                    isn_internacao_leito,
+                    isn_internacao_leito, internacao["dsc_destino"],
                 )
             )
             db.execute(
@@ -2245,16 +2274,16 @@ def register_routes(app):
                 """INSERT INTO prontuarios
                     (numero_prontuario, paciente_nome, unidade_id, data_internacao,
                      data_alta, prioridade, localizacao_fisica, status_atual,
-                     integra_isn_internacao_leito, recebido_contas_medicas_em,
+                     integra_isn_internacao_leito, destino, recebido_contas_medicas_em,
                      recebido_contas_medicas_usuario_id)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,'contas_medicas',%s,NOW(),%s)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,'contas_medicas',%s,%s,NOW(),%s)
                    RETURNING *""",
                 (
                     numero_prontuario, internacao["paciente_nome"],
                     unidade_internacao,
                     internacao["dat_internacao"], internacao["dat_alta"],
                     prioridade, localizacao,
-                    isn_internacao_leito, session["usuario_id"],
+                    isn_internacao_leito, internacao["dsc_destino"], session["usuario_id"],
                 )
             )
             db.execute(
@@ -3015,6 +3044,8 @@ def register_routes(app):
             "status_label": STATUS_LABEL,
             "ambiente_homolog": os.environ.get("AMBIENTE", "").strip().lower() == "homolog",
             "url_homologacao": _url_homologacao(),
+            "logo_paginas": os.environ.get("LOGO_PAGINAS_ARQUIVO", "").strip() or "logo-hm-nova.png",
+            "logo_carregamento": os.environ.get("LOGO_CARREGAMENTO_ARQUIVO", "").strip() or "logo-hm-nova.png",
         }
 
 

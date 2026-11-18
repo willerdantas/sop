@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relatório · {{ comp.competencia }} · Prontuário {{ prontuario.numero_prontuario }}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 28px 36px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .barra-acoes { text-align: right; margin-bottom: 18px; }
+  .barra-acoes button {
+    background: #00A1A2; color: #fff; border: none; border-radius: 6px;
+    padding: 9px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  h2 { font-size: 14px; margin: 24px 0 8px; border-bottom: 2px solid #00A1A2; padding-bottom: 4px; }
+  .subtitulo { color: #666; font-size: 12.5px; margin: 0 0 18px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; font-size: 12px; vertical-align: top; }
+  th { background: #f2f4f4; font-weight: 700; }
+  .vazio { color: #888; font-style: italic; font-size: 12px; padding: 6px 2px; }
+  .grid-dados {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 20px;
+    margin-bottom: 4px;
+  }
+  .grid-dados .item label {
+    display: block; font-size: 10.5px; color: #666; text-transform: uppercase;
+    letter-spacing: 0.03em; margin-bottom: 2px;
+  }
+  .grid-dados .item span { font-size: 13px; font-weight: 600; }
+  .lista-itens { margin: 4px 0 0; padding-left: 16px; }
+  .lista-itens li { margin-bottom: 2px; }
+  .assinatura {
+    margin-top: 56px;
+    display: flex;
+    justify-content: space-between;
+    gap: 40px;
+  }
+  .assinatura .campo-assinatura { flex: 1; text-align: center; }
+  .assinatura .linha { border-top: 1px solid #333; margin-bottom: 6px; }
+  .assinatura .rotulo { font-size: 12px; color: #444; }
+  .rodape-geracao { margin-top: 10px; font-size: 11px; color: #777; text-align: right; }
+
+  @media print {
+    .barra-acoes { display: none; }
+    body { padding: 0 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="barra-acoes">
+  <button type="button" onclick="window.print()">Imprimir / Salvar PDF</button>
+</div>
+
+<img src="{{ url_for('static', filename='img/' + logo_paginas) }}" alt="Logo" style="max-height:52px; margin-bottom:10px;">
+
+<h1>Relatório de Auditoria — Competência {{ comp.competencia }}</h1>
+<p class="subtitulo">Prontuário {{ prontuario.numero_prontuario }} · {{ prontuario.paciente_nome }}</p>
+
+<h2>Dados do Prontuário</h2>
+<div class="grid-dados">
+  <div class="item"><label>Nº Prontuário</label><span>{{ prontuario.numero_prontuario }}</span></div>
+  <div class="item"><label>Paciente</label><span>{{ prontuario.paciente_nome }}</span></div>
+  <div class="item"><label>Unidade</label><span>{{ prontuario.unidade_nome or "-" }}</span></div>
+  <div class="item"><label>Data de Nascimento</label><span>{{ dat_nascimento | data_br }}</span></div>
+  <div class="item"><label>Idade</label><span>{% if idade %}{{ idade.anos }}a {{ idade.meses }}m {{ idade.dias }}d{% else %}-{% endif %}</span></div>
+  <div class="item"><label>Nome da Mãe</label><span>{{ dsc_mae or "-" }}</span></div>
+  <div class="item"><label>CPF</label><span>{{ num_cpf or "-" }}</span></div>
+  <div class="item"><label>CNS</label><span>{{ num_cns or "-" }}</span></div>
+  <div class="item"><label>Status Atual</label><span>{{ status_label.get(prontuario.status_atual, prontuario.status_atual) }}</span></div>
+  <div class="item"><label>Data de Internação</label><span>{{ prontuario.data_internacao | data_br }}</span></div>
+  <div class="item"><label>Data de Alta</label><span>{{ prontuario.data_alta | data_br }}</span></div>
+  <div class="item"><label>Prioridade</label><span>{{ "Urgente" if prontuario.prioridade == "urgente" else "Normal" }}</span></div>
+</div>
+
+<h2>CID</h2>
+<table>
+  <thead>
+    <tr><th>Tipo</th><th>CID10</th><th>Descrição</th></tr>
+  </thead>
+  <tbody>
+    {% for c in cids %}
+    <tr>
+      <td>{{ "Principal" if c.primario == "S" else "Secundário" }}</td>
+      <td>{{ c.cod_cid10 or "-" }}</td>
+      <td>{{ c.dsc_cid10 or "-" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3" class="vazio">Nenhum CID registrado.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Histórico de Internação</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Clínica</th><th>Enfermaria</th><th>Leito</th>
+      <th>Data Internação</th><th>Data Alta</th><th>Dias de Clínica</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in comp.historico_leitos %}
+    <tr>
+      <td>{{ h.dsc_clinica or "-" }}</td>
+      <td>{{ h.dsc_enfermaria or "-" }}</td>
+      <td>{{ h.dsc_leito or "-" }}</td>
+      <td>{{ h.dat_internacao | data_br }}</td>
+      <td>{{ h.dat_alta | data_br }}</td>
+      <td>{{ h.dias_clinica }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="vazio">Sem histórico de internação nesta competência.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Dias de Internação (Faturamento)</h2>
+<div class="grid-dados">
+  <div class="item"><label>Dias de Enfermaria</label><span>{{ comp.dias_enfermaria }}</span></div>
+  <div class="item"><label>Dias de UTI</label><span>{{ comp.dias_uti }}</span></div>
+  <div class="item"><label>Diária de Acompanhante</label><span>{{ comp.diaria_acompanhante }}</span></div>
+</div>
+
+<h2>Histórico de Exames (exceto laboratório)</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Exame</th><th>Classificação</th><th>Solicitante</th>
+      <th>Data de Solicitação</th><th>Profissional que Realizou</th><th>Data de Realização</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for ex in exames_sem_laboratorio %}
+    <tr>
+      <td>{{ ex.dsc_exame or "-" }}</td>
+      <td>{{ ex.classificacao or "Sem classificação" }}</td>
+      <td>{{ ex.solicitante_nome | profissional_br(ex.solicitante_conselho, ex.solicitante_num_conselho) }}</td>
+      <td>{{ ex.dat_solicitacao | data_br }}</td>
+      <td>{{ ex.realizacao_nome | profissional_br(ex.realizacao_conselho, ex.realizacao_num_conselho) }}</td>
+      <td>{{ ex.dat_realizacao | data_br }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="vazio">Nenhum exame (fora laboratório) nesta competência.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Prescrições</h2>
+<table>
+  <thead>
+    <tr><th>Data</th><th>Tipo</th><th>Profissional Solicitante</th><th>Profissional (Aprazamento)</th><th>Itens</th></tr>
+  </thead>
+  <tbody>
+    {% for p in comp.prescricoes %}
+    <tr>
+      <td>{{ p.dat_prescricao | data_br }}</td>
+      <td>{{ p.tipo or "-" }}</td>
+      <td>{{ p.profissional_nome | profissional_br(p.profissional_conselho, p.profissional_num_conselho) }}</td>
+      <td>{{ p.aprazamento_nome | profissional_br(p.aprazamento_conselho, p.aprazamento_num_conselho) }}</td>
+      <td>
+        {% if p.itens %}
+        <ul class="lista-itens">
+          {% for item in p.itens %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        -
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="vazio">Nenhuma prescrição nesta competência.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Procedimentos</h2>
+<table>
+  <thead>
+    <tr><th>Código SIGTAP</th><th>Descrição</th><th>Quantidade</th><th>Incluído em</th><th>Incluído por</th></tr>
+  </thead>
+  <tbody>
+    {% for p in comp.procedimentos %}
+    <tr>
+      <td>{{ p.codigo }}</td>
+      <td>{{ p.descricao }}</td>
+      <td>{{ p.quantidade }}</td>
+      <td>{{ p.criado_em | data_br }}</td>
+      <td>{{ p.usuario_nome or "-" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="vazio">Nenhum procedimento nesta competência.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="assinatura">
+  <div class="campo-assinatura">
+    <div class="linha">&nbsp;</div>
+    <div class="rotulo">Assinatura do Auditor</div>
+  </div>
+</div>
+<p class="rodape-geracao">Relatório gerado em {{ gerado_em.strftime('%d/%m/%Y %H:%M') }}</p>
+
+</body>
+</html>

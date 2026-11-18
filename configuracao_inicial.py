@@ -317,6 +317,70 @@ def banco():
                            **contexto)
 
 
+EXTENSOES_LOGO_PERMITIDAS = ("png", "jpg", "jpeg", "svg", "webp")
+PASTA_LOGOS = os.path.join(BASE_DIR, "static", "img")
+LOGOS_CONFIGURAVEIS = (
+    # (campo do form, nome base do arquivo salvo, chave gravada no .env)
+    ("logo_paginas", "logo_paginas", "LOGO_PAGINAS_ARQUIVO"),
+    ("logo_carregamento", "logo_carregamento", "LOGO_CARREGAMENTO_ARQUIVO"),
+)
+
+
+def _salvar_logo(arquivo, nome_base, chave_env):
+    """Salva o arquivo enviado como static/img/<nome_base>.<ext> (removendo
+    uma versao anterior com outra extensao) e grava o nome final gerado em
+    chave_env no .env (texto puro - nao e segredo). Devolve a mensagem de
+    erro, ou None se deu certo."""
+    nome_original = arquivo.filename or ""
+    if "." not in nome_original:
+        return "Arquivo sem extensão."
+    extensao = nome_original.rsplit(".", 1)[1].lower()
+    if extensao not in EXTENSOES_LOGO_PERMITIDAS:
+        return f"Formato não permitido. Use: {', '.join(EXTENSOES_LOGO_PERMITIDAS)}."
+
+    for extensao_antiga in EXTENSOES_LOGO_PERMITIDAS:
+        caminho_antigo = os.path.join(PASTA_LOGOS, f"{nome_base}.{extensao_antiga}")
+        if os.path.isfile(caminho_antigo):
+            os.remove(caminho_antigo)
+
+    nome_arquivo = f"{nome_base}.{extensao}"
+    arquivo.save(os.path.join(PASTA_LOGOS, nome_arquivo))
+    _gravar_env({chave_env: nome_arquivo})
+    return None
+
+
+@bp.route("/logos", methods=["POST"])
+def logos():
+    """Troca a logo das paginas/relatorios e/ou a da tela de carregamento.
+    So pelo admin logado (nao faz sentido durante o modo de configuracao,
+    antes de haver banco/usuarios)."""
+    if _estado["ativo"]:
+        return redirect(url_for("configuracao.inicio"))
+    if not session.get("usuario_id"):
+        return redirect(url_for("login", next=request.path))
+    if session.get("perfil") != "admin":
+        flash("Voce nao tem permissao para acessar esta pagina.", "erro")
+        return redirect(url_for("dashboard"))
+
+    algum_erro = False
+    algum_enviado = False
+    for campo, nome_base, chave_env in LOGOS_CONFIGURAVEIS:
+        arquivo = request.files.get(campo)
+        if not arquivo or not arquivo.filename:
+            continue
+        algum_enviado = True
+        erro = _salvar_logo(arquivo, nome_base, chave_env)
+        if erro:
+            flash(erro, "erro")
+            algum_erro = True
+
+    if not algum_enviado:
+        flash("Nenhum arquivo selecionado.", "erro")
+    elif not algum_erro:
+        flash("Logo(s) atualizada(s). Pode levar um restart para refletir em todos os processos.", "sucesso")
+    return redirect(url_for("configuracao.banco"))
+
+
 def _mesmo_banco(url_a, url_b):
     a, b = _campos_da_url(url_a), _campos_da_url(url_b)
     return all(a[c] == b[c] for c in ("host", "porta", "banco"))

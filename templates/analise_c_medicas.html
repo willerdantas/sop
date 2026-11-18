@@ -111,6 +111,12 @@
     <summary><h3 style="display:inline;">{{ comp.competencia }}</h3></summary>
     <div style="margin-top:16px;">
 
+      <p style="text-align:right; margin:0 0 14px;">
+        <a class="btn btn-outline btn-sm" href="{{ url_for('relatorio_competencia_contas_medicas', prontuario_id=prontuario.id, competencia=comp.chave) }}" target="_blank">
+          {{ icons.icone('file-check') }} Gerar Relatório
+        </a>
+      </p>
+
       <details class="secao-recolhivel" style="margin-bottom:10px;">
         <summary><strong>Dias de Internação (Faturamento)</strong></summary>
         <div class="form-grid mt-16">
