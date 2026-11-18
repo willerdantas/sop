@@ -115,9 +115,16 @@ class Config:
     SESSION_COOKIE_SECURE = FORCAR_HTTPS
     # Sessao expira apos este tempo sem uso (renovada a cada requisicao).
     PERMANENT_SESSION_LIFETIME = timedelta(hours=int(os.environ.get("SESSAO_HORAS", "8")))
-    # A app nao recebe arquivos: limita o tamanho de qualquer requisicao.
-    MAX_CONTENT_LENGTH = 1 * 1024 * 1024
-    MAX_FORM_MEMORY_SIZE = 64 * 1024
+    # Limita o tamanho de qualquer requisicao. O unico upload de arquivo da
+    # app e a logo (tela de Configuracao do Banco); 20 MB cobre mesmo uma
+    # imagem nao otimizada (ex: PNG grande direto de um editor) e ainda
+    # protege contra requisicoes absurdamente grandes.
+    MAX_CONTENT_LENGTH = 20 * 1024 * 1024
+    # Limite do que o Werkzeug mantem em memoria ao processar o formulario
+    # (inclui o proprio arquivo enviado, nao so campos de texto) - precisa
+    # acompanhar MAX_CONTENT_LENGTH, senao um arquivo maior que isto e
+    # rejeitado mesmo estando dentro do limite acima.
+    MAX_FORM_MEMORY_SIZE = 20 * 1024 * 1024
 
     # Cache dos arquivos estaticos (CSS/JS/imagens) no navegador. Sem isso,
     # o Flask manda "Cache-Control: no-cache", forcando o navegador a

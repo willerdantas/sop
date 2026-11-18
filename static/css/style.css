@@ -461,6 +461,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .topo-logo {
   height: 84px;
+  max-width: 180px;
   object-fit: contain;
 }
 
