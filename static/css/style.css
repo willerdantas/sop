@@ -44,6 +44,10 @@
   --largura-sidebar-recolhida: 68px;
   --largura-sidebar-expandida: 240px;
   --altura-header: 104px;
+  /* Altura so do cabecalho de conteudo (topo-pagina): separada da barra do
+     topo da sidebar porque a logo das paginas e maior e precisa de mais
+     espaco vertical sem esticar a sidebar tambem. */
+  --altura-topo-pagina: 188px;
 
   --transicao-padrao: 0.22s ease;
 }
@@ -417,7 +421,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 .topo-pagina {
-  height: var(--altura-header);
+  height: var(--altura-topo-pagina);
   background: var(--cor-cabecalho-claro);
   display: flex;
   align-items: center;
@@ -460,8 +464,8 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 .topo-logo {
-  height: 84px;
-  max-width: 180px;
+  height: 168px;
+  max-width: 360px;
   object-fit: contain;
 }
 
@@ -873,7 +877,7 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
    da pagina - some o logo e deixa so o avatar do usuario (nome continua
    disponivel pelo "title" ao tocar/segurar). */
 @media (max-width: 640px) {
-  :root { --altura-header: 72px; }
+  :root { --altura-header: 72px; --altura-topo-pagina: 72px; }
   .topo-pagina { gap: 8px; }
   .topo-pagina h1 { font-size: 16px; }
   .topo-pagina .subtitulo { font-size: 11px; }
