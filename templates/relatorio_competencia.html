@@ -134,7 +134,7 @@
 <table>
   <thead>
     <tr>
-      <th>Exame</th><th>Classificação</th><th>Solicitante</th>
+      <th>Exame</th><th>Clínica</th><th>Classificação</th><th>Solicitante</th>
       <th>Data de Solicitação</th><th>Profissional que Realizou</th><th>Data de Realização</th>
     </tr>
   </thead>
@@ -142,6 +142,7 @@
     {% for ex in exames_sem_laboratorio %}
     <tr>
       <td>{{ ex.dsc_exame or "-" }}</td>
+      <td>{{ ex.dsc_clinica or "-" }}</td>
       <td>{{ ex.classificacao or "Sem classificação" }}</td>
       <td>{{ ex.solicitante_nome | profissional_br(ex.solicitante_conselho, ex.solicitante_num_conselho) }}</td>
       <td>{{ ex.dat_solicitacao | data_br }}</td>
@@ -149,7 +150,7 @@
       <td>{{ ex.dat_realizacao | data_br }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="vazio">Nenhum exame (fora laboratório) nesta competência.</td></tr>
+    <tr><td colspan="7" class="vazio">Nenhum exame (fora laboratório) nesta competência.</td></tr>
     {% endfor %}
   </tbody>
 </table>

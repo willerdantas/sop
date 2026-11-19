@@ -12,6 +12,7 @@
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Dados do Prontuário</h3>
+    {% if prontuario.status_atual != 'finalizado' %}
     <div class="acoes-linha">
       <button class="btn btn-primario btn-sm" id="btn-enviar-sop">Devolver para o SOP</button>
       {% if prontuario.status_atual == 'pronto_faturamento' %}
@@ -22,6 +23,7 @@
       <button class="btn btn-outline btn-sm" id="btn-enviar-faturamento">Enviar para Faturamento</button>
       {% endif %}
     </div>
+    {% endif %}
   </div>
   <div class="form-grid mt-16">
     <div class="info-item">
@@ -210,6 +212,7 @@
             <thead>
               <tr>
                 <th>Exame</th>
+                <th>Clínica</th>
                 <th>Solicitante</th>
                 <th>Data de Solicitação</th>
                 <th>Profissional que Realizou</th>
@@ -222,6 +225,7 @@
               {% for ex in comp.exames %}
               <tr>
                 <td>{{ ex.dsc_exame or "-" }}</td>
+                <td>{{ ex.dsc_clinica or "-" }}</td>
                 <td>{{ ex.solicitante_nome | profissional_br(ex.solicitante_conselho, ex.solicitante_num_conselho) }}</td>
                 <td>{{ ex.dat_solicitacao | data_br }}</td>
                 <td>{{ ex.realizacao_nome | profissional_br(ex.realizacao_conselho, ex.realizacao_num_conselho) }}</td>
@@ -230,7 +234,7 @@
                 <td>{{ ex.dat_cancelamento | data_br }}</td>
               </tr>
               {% else %}
-              <tr><td colspan="7" class="vazio-estado">Nenhum exame encontrado nesta competência.</td></tr>
+              <tr><td colspan="8" class="vazio-estado">Nenhum exame encontrado nesta competência.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -281,10 +285,12 @@
       <details class="secao-recolhivel" style="margin-bottom:10px;">
         <summary><strong>Procedimentos</strong> &middot; {{ comp.procedimentos | length }} procedimento(s)</summary>
         <div style="margin-top:12px;">
+          {% if prontuario.status_atual != 'finalizado' %}
           <button class="btn btn-laranja btn-sm btn-incluir-procedimento"
                   data-competencia="{{ comp.chave }}" data-competencia-rotulo="{{ comp.competencia }}" type="button">
             {{ icons.icone('plus') }} Incluir Procedimento
           </button>
+          {% endif %}
           <div class="tabela-wrap" style="margin-top:12px;">
             <table class="tabela-padrao">
               <thead>
@@ -306,7 +312,11 @@
                   <td>{{ p.criado_em | data_br }}</td>
                   <td>{{ p.usuario_nome or "-" }}</td>
                   <td class="acoes-linha">
+                    {% if prontuario.status_atual != 'finalizado' %}
                     <button class="btn btn-perigo btn-sm" onclick="excluirProcedimentoProntuario({{ p.id }})">Excluir</button>
+                    {% else %}
+                    -
+                    {% endif %}
                   </td>
                 </tr>
                 {% else %}
@@ -358,9 +368,11 @@
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Pendências do Prontuário</h3>
+    {% if prontuario.status_atual != 'finalizado' %}
     <button class="btn btn-laranja btn-sm" id="btn-nova-pendencia" type="button">
       {{ icons.icone('plus') }} Registrar Pendência
     </button>
+    {% endif %}
   </div>
   <div class="tabela-wrap">
     <table class="tabela-padrao">

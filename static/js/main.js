@@ -460,7 +460,7 @@ const CONFIG_SELECTS_PENDENCIA = [
     montar: (ev) => ({ isnClinica: ev.isn_clinica, dataHora: ev.dat_cadastro,
                         profissionalNome: ev.profissional_nome, resumo: resumoEvolucao(ev) }) },
   { id: "select-exame-pendencia", chave: "exames",
-    montar: (ex) => ({ isnClinica: null, dataHora: ex.dat_solicitacao,
+    montar: (ex) => ({ isnClinica: ex.isn_clinica, dataHora: ex.dat_solicitacao,
                         profissionalNome: ex.solicitante_nome, resumo: resumoExame(ex) }) },
 ];
 
@@ -490,6 +490,7 @@ function resumoEvolucao(ev) {
 function resumoExame(ex) {
   return [
     `Exame ${ex.dsc_exame || ""}${ex.classificacao ? ` (${ex.classificacao})` : ""} solicitado em ${formatarData(ex.dat_solicitacao)}`,
+    `Clínica: ${ex.dsc_clinica || "-"}`,
     `Solicitante: ${profissionalComConselho(ex.solicitante_nome, ex.solicitante_conselho, ex.solicitante_num_conselho)}`,
     `Realização: ${profissionalComConselho(ex.realizacao_nome, ex.realizacao_conselho, ex.realizacao_num_conselho)}`,
   ].join(" | ");
@@ -575,7 +576,7 @@ function carregarExamesPendencia(prontuarioId) {
     "select-exame-pendencia", "exames",
     `/api/prontuarios/${encodeURIComponent(prontuarioId)}/exames-pendencia`,
     "Nenhum exame (não cancelado) nesta internação",
-    (ex) => [formatarData(ex.dat_solicitacao), ex.dsc_exame || "Exame", ex.classificacao,
+    (ex) => [formatarData(ex.dat_solicitacao), ex.dsc_exame || "Exame", ex.classificacao, ex.dsc_clinica,
              profissionalComConselho(ex.solicitante_nome, ex.solicitante_conselho, ex.solicitante_num_conselho)]
       .filter(Boolean).join(" · "));
 }

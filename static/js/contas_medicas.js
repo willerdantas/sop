@@ -241,7 +241,7 @@ async function carregarFaturados() {
   try {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("finalizado").toString()}`);
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Nenhum prontuário faturado ainda.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhum prontuário faturado ainda.</td></tr>`;
       return;
     }
 
@@ -253,10 +253,13 @@ async function carregarFaturados() {
         <td>${badgeDestino(p.destino)}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${esc(p.finalizado_usuario_nome || "-")}</td>
+        <td class="acoes-linha">
+          <button class="btn btn-outline btn-sm" onclick="location.href='/analise_c_medicas/${esc(p.id)}'">Analisar</button>
+        </td>
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

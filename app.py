@@ -787,14 +787,15 @@ def calcular_idade(nascimento, referencia):
 
 def listar_exames_internacao(isn_internacao):
     """Exames solicitados durante a internacao (por isn_internacao), com o
-    nome do exame, solicitante e profissional que realizou (nome, conselho
-    e numero)."""
+    nome do exame, clinica onde foi solicitado, solicitante e profissional
+    que realizou (nome, conselho e numero)."""
     if not isn_internacao:
         return []
     return db.query_integra(
         """SELECT es.isn_exame, ex.dsc_exame,
                   es.dat_solicitacao, es.dat_agendamento,
                   es.dat_realizacao, es.dat_cancelamento,
+                  es.isn_clinica, c.dsc_clinica,
                   TRIM(sol.dsc_usuario) AS solicitante_nome,
                   TRIM(sol.num_conselho::text) AS solicitante_num_conselho,
                   TRIM(csol.cod_conselho::text) AS solicitante_conselho,
@@ -803,6 +804,7 @@ def listar_exames_internacao(isn_internacao):
                   TRIM(creal.cod_conselho::text) AS realizacao_conselho
            FROM t_exame_solic es
            LEFT JOIN t_exame ex ON ex.isn_exame = es.isn_exame
+           LEFT JOIN t_clinica c ON c.isn_clinica = es.isn_clinica
            LEFT JOIN t_profissional sol ON sol.isn_usuario = es.isn_profissional
            LEFT JOIN t_conselho csol ON csol.isn_conselho = sol.isn_conselho
            LEFT JOIN t_profissional real ON real.isn_usuario = es.isn_prof_realizou
@@ -1202,7 +1204,7 @@ ENDPOINT_PARA_PAGINAS = {
     "api_painel_monitoramento_contas_medicas": ("painel_monitoramento_contas_medicas",),
     "api_listar_profissionais": ("profissionais",),
     "api_listar_procedimentos_sigtap": ("procedimentos", "contas_medicas"),
-    "api_listar_procedimentos_prontuario": ("sop", "unidade", "contas_medicas"),
+    "api_listar_procedimentos_prontuario": ("unidade", "contas_medicas"),
     "api_incluir_procedimento_prontuario": ("contas_medicas",),
     "api_excluir_procedimento_prontuario": ("contas_medicas",),
 }

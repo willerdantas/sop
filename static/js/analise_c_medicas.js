@@ -15,13 +15,16 @@ document.addEventListener("DOMContentLoaded", () => {
   configurarBuscaProfissional();
   configurarToggleItensPrescricao();
 
-  document.getElementById("btn-nova-pendencia").addEventListener("click", () => {
-    limparBuscaProfissional();
-    carregarPrescricoesPendencia(PRONTUARIO_ID);
-    carregarEvolucoesPendencia(PRONTUARIO_ID);
-    carregarExamesPendencia(PRONTUARIO_ID);
-    abrirModal("modal-nova-pendencia");
-  });
+  const btnNovaPendencia = document.getElementById("btn-nova-pendencia");
+  if (btnNovaPendencia) {
+    btnNovaPendencia.addEventListener("click", () => {
+      limparBuscaProfissional();
+      carregarPrescricoesPendencia(PRONTUARIO_ID);
+      carregarEvolucoesPendencia(PRONTUARIO_ID);
+      carregarExamesPendencia(PRONTUARIO_ID);
+      abrirModal("modal-nova-pendencia");
+    });
+  }
 
   document.getElementById("form-nova-pendencia").addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -46,19 +49,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  document.getElementById("btn-enviar-sop").addEventListener("click", async () => {
-    if (!confirm("Confirmar envio deste prontuário para o SOP?")) return;
+  const btnEnviarSop = document.getElementById("btn-enviar-sop");
+  if (btnEnviarSop) {
+    btnEnviarSop.addEventListener("click", async () => {
+      if (!confirm("Confirmar envio deste prontuário para o SOP?")) return;
 
-    try {
-      await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
-        method: "POST",
-        body: JSON.stringify({ destino: "sop", observacao: "Devolvido pela equipe de Contas Médicas" }),
-      });
-      window.location.href = "/contas-medicas";
-    } catch (e) {
-      alert(e.message);
-    }
-  });
+      try {
+        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/mover`, {
+          method: "POST",
+          body: JSON.stringify({ destino: "sop", observacao: "Devolvido pela equipe de Contas Médicas" }),
+        });
+        window.location.href = "/contas-medicas";
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  }
 
   const btnEnviarAuditoria = document.getElementById("btn-enviar-auditoria");
   if (btnEnviarAuditoria) {

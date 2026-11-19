@@ -108,7 +108,6 @@ function renderizarTabela(lista) {
       <td>${formatarTimerHorasUteis(p.horas_uteis_na_unidade)}</td>
       <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
       <td class="acoes-linha">
-        <button class="btn btn-outline btn-sm" onclick="location.href='/analise_unidade/${esc(p.id)}'">Analisar</button>
         <button class="btn btn-primario btn-sm" onclick="enviarParaSOP(${esc(p.id)})">Enviar p/ SOP</button>
       </td>
     </tr>

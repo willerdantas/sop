@@ -9,7 +9,6 @@ let pendenciasAbertasCount = 0;
 document.addEventListener("DOMContentLoaded", () => {
   carregarPendencias();
   carregarHistorico();
-  carregarProcedimentos();
   configurarBuscaProfissional();
 
   document.getElementById("btn-nova-pendencia").addEventListener("click", () => {
@@ -184,24 +183,3 @@ async function carregarHistorico() {
   }
 }
 
-async function carregarProcedimentos() {
-  const tbody = document.getElementById("tbody-procedimentos-analise");
-  try {
-    const lista = await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/procedimentos`);
-    if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Nenhum procedimento incluído.</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = lista.map((p) => `
-      <tr>
-        <td><strong>${esc(p.codigo)}</strong></td>
-        <td>${esc(p.descricao)}</td>
-        <td>${esc(p.quantidade)}</td>
-        <td>${esc(formatarData(p.criado_em))}</td>
-        <td>${esc(p.usuario_nome || "-")}</td>
-      </tr>
-    `).join("");
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
-  }
-}
