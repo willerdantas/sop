@@ -121,25 +121,43 @@
 
       <details class="secao-recolhivel" style="margin-bottom:10px;">
         <summary><strong>Dias de Internação (Faturamento)</strong></summary>
-        <div class="form-grid mt-16">
-          <div class="campo" style="display:flex; align-items:center; gap:10px;">
-            <label style="margin-bottom:0; white-space:nowrap;">Dias de Enfermaria</label>
-            <input type="number" min="0" id="input-dias-enfermaria-{{ comp.chave }}" value="{{ comp.dias_enfermaria }}">
-          </div>
-          <div class="campo" style="display:flex; align-items:center; gap:10px;">
-            <label style="margin-bottom:0; white-space:nowrap;">Dias de UTI</label>
-            <input type="number" min="0" id="input-dias-uti-{{ comp.chave }}" value="{{ comp.dias_uti }}">
-          </div>
-          <div class="campo" style="display:flex; align-items:center; gap:10px;">
-            <label style="margin-bottom:0; white-space:nowrap;">Diária de Acompanhante</label>
-            <input type="number" min="0" id="input-diaria-acompanhante-{{ comp.chave }}" value="{{ comp.diaria_acompanhante }}">
-          </div>
-          <div class="campo" style="display:flex; align-items:center;">
-            <button type="button" class="btn btn-primario btn-salvar-valores-faturamento" data-competencia="{{ comp.chave }}">
-              Salvar Valores
-            </button>
-          </div>
+        <div class="tabela-wrap" style="margin-top:12px;" id="tabela-dias-tipo-{{ comp.chave }}">
+          <table class="tabela-padrao">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th style="width:140px;">Dias</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for linha in comp.dias_por_tipo %}
+              <tr>
+                <td>{{ linha.nome }}</td>
+                <td>
+                  {% if linha.tipo_diaria_id is not none %}
+                  <input type="number" min="0" class="input-dias-tipo-diaria"
+                         data-tipo-diaria-id="{{ linha.tipo_diaria_id }}"
+                         data-acompanhante="{{ '1' if linha.acompanhante else '0' }}"
+                         value="{{ linha.dias }}">
+                  {% else %}
+                  {{ linha.dias }}
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="2" class="vazio-estado">Sem dias de internação neste mês.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
+        <p style="margin-top:12px;">
+          <strong>Diária de Acompanhante:</strong>
+          <span id="total-diaria-acompanhante-{{ comp.chave }}">{{ comp.diaria_acompanhante }}</span>
+          <span class="texto-suave">(somada automaticamente dos tipos marcados com acompanhante)</span>
+        </p>
+        <button type="button" class="btn btn-primario btn-salvar-valores-faturamento" data-competencia="{{ comp.chave }}">
+          Salvar Valores
+        </button>
       </details>
 
       <details class="secao-recolhivel" style="margin-bottom:10px;">

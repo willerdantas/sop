@@ -36,6 +36,39 @@ CREATE TABLE IF NOT EXISTS clinicas_tipo (
 );
 
 -- ---------------------------------------------------------
+-- TIPOS DE DIARIA (catalogo: UTI/Enfermaria + se tem acompanhante), usado
+-- para calcular automaticamente dias_uti/dias_enfermaria/diaria de
+-- acompanhante por competencia a partir da clinica de cada leito do
+-- historico de internacao. Diferente de "clinicas_tipo" (classificacao
+-- administrativa livre, ja existente).
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS tipos_diaria_clinica (
+    id              SERIAL PRIMARY KEY,
+    nome            VARCHAR(80) NOT NULL, -- nome do tipo (ja identifica UTI/Enfermaria, ex: "UTI Adulto tipo II sem acompanhante")
+    acompanhante    BOOLEAN NOT NULL DEFAULT FALSE,
+    ativo           BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS clinica_tipo_diaria (
+    isn_clinica     BIGINT PRIMARY KEY,
+    tipo_diaria_id  INTEGER NOT NULL REFERENCES tipos_diaria_clinica(id),
+    atualizado_em   TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Dias de internacao por competencia, contabilizados por tipo de diaria
+-- (substitui os campos fixos dias_enfermaria/dias_uti de
+-- prontuario_competencia_faturamento); a diaria de acompanhante e somada
+-- automaticamente a partir dos tipos marcados com acompanhante = TRUE.
+CREATE TABLE IF NOT EXISTS prontuario_competencia_dias_tipo (
+    prontuario_id   INTEGER NOT NULL REFERENCES prontuarios(id) ON DELETE CASCADE,
+    competencia     VARCHAR(7) NOT NULL,
+    tipo_diaria_id  INTEGER NOT NULL REFERENCES tipos_diaria_clinica(id),
+    dias            INTEGER NOT NULL DEFAULT 0,
+    atualizado_em   TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (prontuario_id, competencia, tipo_diaria_id)
+);
+
+-- ---------------------------------------------------------
 -- PERFIS (controle de acesso por pagina, gerenciavel via tela Perfis)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS perfis (

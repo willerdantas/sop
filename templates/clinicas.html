@@ -20,6 +20,7 @@
         <tr>
           <th>Nome</th>
           <th>Tipo</th>
+          <th>Tipo de Diária</th>
           <th>Ações</th>
         </tr>
       </thead>
@@ -28,12 +29,14 @@
         <tr>
           <td>{{ u.dsc_clinica }}</td>
           <td>{{ u.tipo or "-" }}</td>
+          <td>{{ u.tipo_diaria_nome or "-" }}</td>
           <td class="acoes-linha">
-            <button class="btn btn-outline btn-sm" onclick='editarTipoClinica({{ u.isn_clinica }}, {{ u.dsc_clinica | tojson }}, {{ u.tipo | tojson }})'>Editar</button>
+            <button class="btn btn-outline btn-sm" onclick='editarTipoClinica({{ u.isn_clinica }}, {{ u.dsc_clinica | tojson }}, {{ u.tipo | tojson }})'>Editar Tipo</button>
+            <button class="btn btn-outline btn-sm" onclick='editarTipoDiariaClinica({{ u.isn_clinica }}, {{ u.dsc_clinica | tojson }}, {{ u.tipo_diaria_id | tojson }})'>Editar Diária</button>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="3" class="vazio-estado">Nenhuma clínica encontrada.</td></tr>
+        <tr><td colspan="4" class="vazio-estado">Nenhuma clínica encontrada.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -48,6 +51,44 @@
        class="btn btn-outline btn-sm {{ 'btn-ghost' if pagina >= total_paginas }}">Próxima</a>
   </div>
   {% endif %}
+</div>
+
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Tipos de Diária</h3>
+    <button class="btn btn-laranja btn-sm" id="btn-novo-tipo-diaria" type="button">
+      {{ icons.icone('plus') }} Novo Tipo
+    </button>
+  </div>
+  <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
+    Catálogo usado para classificar cada clínica e marcar se ela conta diária de acompanhante, para a contagem
+    automática de diárias por competência (ex: UTI Adulto tipo II sem acompanhante, Enfermaria com acompanhante).
+  </p>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Acompanhante</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tipos_diaria %}
+        <tr>
+          <td>{{ t.nome }}</td>
+          <td>{{ "Sim" if t.acompanhante else "Não" }}</td>
+          <td class="acoes-linha">
+            <button class="btn btn-outline btn-sm" onclick='editarTipoDiaria({{ t | tojson }})'>Editar</button>
+            <button class="btn btn-perigo btn-sm" onclick='excluirTipoDiaria({{ t.id }})'>Excluir</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="vazio-estado">Nenhum tipo de diária cadastrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <div class="card-branco">
@@ -121,6 +162,61 @@
       </div>
       <div class="form-acoes">
         <button type="button" class="btn btn-ghost" data-fechar-modal="modal-tipo-clinica">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal cadastro/edicao de tipo de diaria (catalogo) -->
+<div class="modal-fundo" id="modal-tipo-diaria">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-tipo-diaria">{{ icons.icone('x') }}</button>
+    <h3 id="titulo-modal-tipo-diaria">Novo Tipo de Diária</h3>
+    <form id="form-tipo-diaria">
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Nome *</label>
+          <input type="text" name="nome" placeholder="Ex: UTI Adulto tipo II sem acompanhante" required>
+        </div>
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label><input type="checkbox" name="acompanhante"> Conta diária de acompanhante</label>
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-tipo-diaria">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para vincular o tipo de diaria a uma clinica do ISIVITA -->
+<div class="modal-fundo" id="modal-tipo-diaria-clinica">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-tipo-diaria-clinica">{{ icons.icone('x') }}</button>
+    <h3>Editar Tipo de Diária da Clínica</h3>
+    <form id="form-tipo-diaria-clinica">
+      <input type="hidden" name="isn_clinica">
+      <div class="form-grid">
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Nome</label>
+          <input type="text" id="tipo-diaria-clinica-nome" disabled>
+          <small class="texto-suave">Cadastrado no sistema hospitalar (ISIVITA), não pode ser alterado aqui.</small>
+        </div>
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Tipo de Diária *</label>
+          <select name="tipo_diaria_id" required>
+            <option value="">Selecione...</option>
+            {% for t in tipos_diaria %}
+            <option value="{{ t.id }}">{{ t.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-tipo-diaria-clinica">Cancelar</button>
         <button type="submit" class="btn btn-primario">Salvar</button>
       </div>
     </form>

@@ -124,9 +124,22 @@
 </table>
 
 <h2>Dias de Internação (Faturamento)</h2>
+<table>
+  <thead>
+    <tr><th>Tipo</th><th>Dias</th></tr>
+  </thead>
+  <tbody>
+    {% for linha in comp.dias_por_tipo %}
+    <tr>
+      <td>{{ linha.nome }}</td>
+      <td>{{ linha.dias }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="2" class="vazio">Sem dias de internação nesta competência.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
 <div class="grid-dados">
-  <div class="item"><label>Dias de Enfermaria</label><span>{{ comp.dias_enfermaria }}</span></div>
-  <div class="item"><label>Dias de UTI</label><span>{{ comp.dias_uti }}</span></div>
   <div class="item"><label>Diária de Acompanhante</label><span>{{ comp.diaria_acompanhante }}</span></div>
 </div>
 

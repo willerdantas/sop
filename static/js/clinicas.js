@@ -49,6 +49,53 @@ document.addEventListener("DOMContentLoaded", () => {
       alert(e.message);
     }
   });
+
+  document.getElementById("btn-novo-tipo-diaria").addEventListener("click", () => {
+    const form = document.getElementById("form-tipo-diaria");
+    form.reset();
+    form.querySelector('[name="id"]').value = "";
+    document.getElementById("titulo-modal-tipo-diaria").textContent = "Novo Tipo de Diária";
+    abrirModal("modal-tipo-diaria");
+  });
+
+  document.getElementById("form-tipo-diaria").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const form = ev.target;
+    const dados = Object.fromEntries(new FormData(form).entries());
+    const id = dados.id;
+    delete dados.id;
+    dados.acompanhante = form.querySelector('[name="acompanhante"]').checked;
+
+    try {
+      if (id) {
+        await apiFetch(`/api/tipos-diaria-clinica/${id}`, { method: "PUT", body: JSON.stringify(dados) });
+      } else {
+        await apiFetch("/api/tipos-diaria-clinica", { method: "POST", body: JSON.stringify(dados) });
+      }
+      fecharModal("modal-tipo-diaria");
+      window.location.reload();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  document.getElementById("form-tipo-diaria-clinica").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const form = ev.target;
+    const isn = form.querySelector('[name="isn_clinica"]').value;
+    const tipoDiariaId = form.querySelector('[name="tipo_diaria_id"]').value;
+
+    try {
+      await apiFetch(`/api/clinicas/${isn}/tipo-diaria`, {
+        method: "PUT",
+        body: JSON.stringify({ tipo_diaria_id: tipoDiariaId }),
+      });
+      fecharModal("modal-tipo-diaria-clinica");
+      window.location.reload();
+    } catch (e) {
+      alert(e.message);
+    }
+  });
 });
 
 function editarTipoClinica(isnClinica, nome, tipoAtual) {
@@ -57,6 +104,34 @@ function editarTipoClinica(isnClinica, nome, tipoAtual) {
   form.querySelector('[name="tipo"]').value = tipoAtual || "";
   document.getElementById("tipo-clinica-nome").value = nome;
   abrirModal("modal-tipo-clinica");
+}
+
+function editarTipoDiaria(tipo) {
+  const form = document.getElementById("form-tipo-diaria");
+  form.reset();
+  form.querySelector('[name="id"]').value = tipo.id;
+  form.querySelector('[name="nome"]').value = tipo.nome || "";
+  form.querySelector('[name="acompanhante"]').checked = !!tipo.acompanhante;
+  document.getElementById("titulo-modal-tipo-diaria").textContent = "Editar Tipo de Diária";
+  abrirModal("modal-tipo-diaria");
+}
+
+async function excluirTipoDiaria(id) {
+  if (!confirm("Excluir este tipo de diária? Clínicas vinculadas deixarão de contar automaticamente.")) return;
+  try {
+    await apiFetch(`/api/tipos-diaria-clinica/${id}`, { method: "DELETE" });
+    window.location.reload();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function editarTipoDiariaClinica(isnClinica, nome, tipoDiariaIdAtual) {
+  const form = document.getElementById("form-tipo-diaria-clinica");
+  form.querySelector('[name="isn_clinica"]').value = isnClinica;
+  form.querySelector('[name="tipo_diaria_id"]').value = tipoDiariaIdAtual || "";
+  document.getElementById("tipo-diaria-clinica-nome").value = nome;
+  abrirModal("modal-tipo-diaria-clinica");
 }
 
 async function carregar() {

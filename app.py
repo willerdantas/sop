@@ -900,18 +900,50 @@ def encerrar_analises_abertas(prontuario_id):
     )
 
 
-def somar_dias_por_tipo_internacao(historico_leitos):
-    """Soma os dias de internacao (dias_clinica) do historico, separando entre
-    UTI (clinicas com "UTI" no nome) e enfermaria (as demais)."""
-    dias_enfermaria = 0
-    dias_uti = 0
+TIPO_DIARIA_NAO_CLASSIFICADO = "Não classificado"
+
+
+def mapa_tipos_diaria_clinica(isns_clinica):
+    """Busca, para cada isn_clinica informado, o tipo de diaria cadastrado
+    (ver tela Clinicas). Retorna um dict isn_clinica -> {"tipo_diaria_id",
+    "nome", "acompanhante"}."""
+    isns = [int(i) for i in isns_clinica if i is not None]
+    if not isns:
+        return {}
+    linhas = db.query(
+        """SELECT ctd.isn_clinica, td.id AS tipo_diaria_id, td.nome, td.acompanhante
+           FROM clinica_tipo_diaria ctd
+           JOIN tipos_diaria_clinica td ON td.id = ctd.tipo_diaria_id
+           WHERE ctd.isn_clinica = ANY(%s)""",
+        (isns,)
+    )
+    return {int(l["isn_clinica"]): {"tipo_diaria_id": l["tipo_diaria_id"], "nome": l["nome"],
+                                     "acompanhante": l["acompanhante"]} for l in linhas}
+
+
+def somar_dias_por_tipo_diaria(historico_leitos):
+    """Soma os dias de internacao (dias_clinica) do historico agrupando por
+    tipo de diaria cadastrado para cada clinica (ver tela Clinicas). Clinicas
+    sem tipo cadastrado caem num grupo "Nao classificado". Retorna uma lista
+    de linhas {tipo_diaria_id, nome, acompanhante, dias}, ordenada por nome
+    (nao classificado por ultimo)."""
+    mapa_tipos = mapa_tipos_diaria_clinica(h["isn_clinica"] for h in historico_leitos)
+    dias_por_tipo = {}
     for h in historico_leitos:
         dias = h["dias_clinica"] or 0
-        if h["dsc_clinica"] and "uti" in h["dsc_clinica"].lower():
-            dias_uti += dias
+        isn = int(h["isn_clinica"]) if h.get("isn_clinica") is not None else None
+        tipo = mapa_tipos.get(isn)
+        if tipo:
+            chave = tipo["tipo_diaria_id"]
+            linha = dias_por_tipo.setdefault(chave, {
+                "tipo_diaria_id": chave, "nome": tipo["nome"], "acompanhante": tipo["acompanhante"], "dias": 0,
+            })
         else:
-            dias_enfermaria += dias
-    return dias_enfermaria, dias_uti
+            linha = dias_por_tipo.setdefault(None, {
+                "tipo_diaria_id": None, "nome": TIPO_DIARIA_NAO_CLASSIFICADO, "acompanhante": False, "dias": 0,
+            })
+        linha["dias"] += dias
+    return sorted(dias_por_tipo.values(), key=lambda r: (r["tipo_diaria_id"] is None, r["nome"]))
 
 
 def dentro_do_filtro_prazo(dias, filtro):
@@ -1491,11 +1523,27 @@ def register_routes(app):
             ([int(u["isn_clinica"]) for u in unidades],)
         )
         mapa_tipos = {t["isn_clinica"]: t["tipo"] for t in tipos_cadastrados}
+        tipos_diaria_vinculados = db.query(
+            """SELECT ctd.isn_clinica, td.id AS tipo_diaria_id, td.nome AS tipo_diaria_nome
+               FROM clinica_tipo_diaria ctd
+               JOIN tipos_diaria_clinica td ON td.id = ctd.tipo_diaria_id
+               WHERE ctd.isn_clinica = ANY(%s)""",
+            ([int(u["isn_clinica"]) for u in unidades],)
+        )
+        mapa_tipos_diaria = {t["isn_clinica"]: t for t in tipos_diaria_vinculados}
         for u in unidades:
             u["tipo"] = mapa_tipos.get(int(u["isn_clinica"]))
+            vinculo = mapa_tipos_diaria.get(int(u["isn_clinica"]))
+            u["tipo_diaria_id"] = vinculo["tipo_diaria_id"] if vinculo else None
+            u["tipo_diaria_nome"] = vinculo["tipo_diaria_nome"] if vinculo else None
+
+        tipos_diaria = db.query(
+            "SELECT * FROM tipos_diaria_clinica WHERE ativo = TRUE ORDER BY nome"
+        )
         return render_template(
             "clinicas.html", unidades=unidades, active_page="clinicas",
-            pagina=pagina, total_paginas=total_paginas, total=total
+            pagina=pagina, total_paginas=total_paginas, total=total,
+            tipos_diaria=tipos_diaria
         )
 
     @app.route("/unidade")
@@ -1563,12 +1611,14 @@ def register_routes(app):
                ORDER BY pp.criado_em DESC""",
             (prontuario_id,)
         )
-        faturamento_salvo = db.query(
-            """SELECT competencia, dias_enfermaria, dias_uti, diaria_acompanhante
-               FROM prontuario_competencia_faturamento WHERE prontuario_id = %s""",
+        dias_tipo_salvos = db.query(
+            """SELECT competencia, tipo_diaria_id, dias
+               FROM prontuario_competencia_dias_tipo WHERE prontuario_id = %s""",
             (prontuario_id,)
         )
-        mapa_faturamento_salvo = {f["competencia"]: f for f in faturamento_salvo}
+        mapa_dias_tipo_salvos = {}
+        for d in dias_tipo_salvos:
+            mapa_dias_tipo_salvos.setdefault(d["competencia"], {})[d["tipo_diaria_id"]] = d["dias"]
 
         historico_leitos_dividido = dividir_leitos_por_competencia(historico_leitos)
         procedimentos_por_competencia = agrupar_por_chave_competencia(procedimentos, "competencia")
@@ -1590,13 +1640,13 @@ def register_routes(app):
         for comp in competencias:
             comp["resumo_exames"] = resumir_exames_por_classificacao(comp["exames"])
             comp["procedimentos"] = procedimentos_por_competencia.get(comp["chave"], [])
-            dias_enfermaria_mes, dias_uti_mes = somar_dias_por_tipo_internacao(comp["historico_leitos"])
-            salvo = mapa_faturamento_salvo.get(comp["chave"])
-            comp["dias_enfermaria"] = salvo["dias_enfermaria"] if salvo and salvo["dias_enfermaria"] is not None else dias_enfermaria_mes
-            comp["dias_uti"] = salvo["dias_uti"] if salvo and salvo["dias_uti"] is not None else dias_uti_mes
-            comp["diaria_acompanhante"] = (salvo["diaria_acompanhante"]
-                                            if salvo and salvo["diaria_acompanhante"] is not None
-                                            else dias_enfermaria_mes)
+            dias_por_tipo = somar_dias_por_tipo_diaria(comp["historico_leitos"])
+            salvos = mapa_dias_tipo_salvos.get(comp["chave"], {})
+            for linha in dias_por_tipo:
+                if linha["tipo_diaria_id"] in salvos:
+                    linha["dias"] = salvos[linha["tipo_diaria_id"]]
+            comp["dias_por_tipo"] = dias_por_tipo
+            comp["diaria_acompanhante"] = sum(l["dias"] for l in dias_por_tipo if l["acompanhante"])
 
         unidades_pendencia = unidades_do_prontuario(prontuario, historico_leitos)
 
@@ -1930,6 +1980,10 @@ def register_routes(app):
     @app.route("/api/prontuarios/<int:prontuario_id>/valores-faturamento/<competencia>", methods=["PUT"])
     @login_required
     def api_editar_valores_faturamento(prontuario_id, competencia):
+        """Salva os dias de internacao do mes, um valor por tipo de diaria
+        (ver tela Clinicas); a diaria de acompanhante e somada automaticamente
+        a partir dos tipos marcados com acompanhante = TRUE, nao e salva
+        separadamente."""
         if not COMPETENCIA_VALIDA.match(competencia):
             return jsonify({"erro": "competencia invalida"}), 400
         data = v.corpo_json()
@@ -1937,22 +1991,32 @@ def register_routes(app):
         if erro:
             return erro
 
-        atualizado = db.execute(
-            """INSERT INTO prontuario_competencia_faturamento
-                   (prontuario_id, competencia, dias_enfermaria, dias_uti, diaria_acompanhante)
-               VALUES (%s,%s,%s,%s,%s)
-               ON CONFLICT (prontuario_id, competencia) DO UPDATE SET
-                   dias_enfermaria = EXCLUDED.dias_enfermaria,
-                   dias_uti = EXCLUDED.dias_uti,
-                   diaria_acompanhante = EXCLUDED.diaria_acompanhante,
-                   atualizado_em = NOW()
-               RETURNING *""",
-            (prontuario_id, competencia,
-             v.inteiro(data.get("dias_enfermaria"), "dias de enfermaria", minimo=0, maximo=3650),
-             v.inteiro(data.get("dias_uti"), "dias de UTI", minimo=0, maximo=3650),
-             v.inteiro(data.get("diaria_acompanhante"), "diarias de acompanhante", minimo=0, maximo=3650))
+        dias_por_tipo = data.get("dias_por_tipo")
+        if not isinstance(dias_por_tipo, dict) or not dias_por_tipo:
+            return jsonify({"erro": "dias_por_tipo e obrigatorio"}), 400
+
+        for tipo_diaria_id, dias in dias_por_tipo.items():
+            db.execute(
+                """INSERT INTO prontuario_competencia_dias_tipo
+                       (prontuario_id, competencia, tipo_diaria_id, dias)
+                   VALUES (%s,%s,%s,%s)
+                   ON CONFLICT (prontuario_id, competencia, tipo_diaria_id) DO UPDATE SET
+                       dias = EXCLUDED.dias, atualizado_em = NOW()""",
+                (prontuario_id, competencia,
+                 v.inteiro(tipo_diaria_id, "tipo_diaria_id", obrigatorio=True),
+                 v.inteiro(dias, "dias", obrigatorio=True, minimo=0, maximo=3650))
+            )
+
+        salvo = db.query(
+            """SELECT pcdt.tipo_diaria_id, pcdt.dias, td.nome, td.acompanhante
+               FROM prontuario_competencia_dias_tipo pcdt
+               JOIN tipos_diaria_clinica td ON td.id = pcdt.tipo_diaria_id
+               WHERE pcdt.prontuario_id = %s AND pcdt.competencia = %s
+               ORDER BY td.nome""",
+            (prontuario_id, competencia)
         )
-        return jsonify(atualizado)
+        return jsonify({"dias_por_tipo": salvo,
+                         "diaria_acompanhante": sum(l["dias"] for l in salvo if l["acompanhante"])})
 
     @app.route("/api/prontuarios/<int:prontuario_id>/registrar-analise-auditoria", methods=["POST"])
     @login_required
@@ -2578,6 +2642,76 @@ def register_routes(app):
                ON CONFLICT (isn_clinica) DO UPDATE SET tipo = EXCLUDED.tipo, atualizado_em = NOW()
                RETURNING *""",
             (isn_clinica, tipo)
+        )
+        return jsonify(atualizado)
+
+    # -----------------------------------------------------------
+    # API - TIPOS DE DIARIA (catalogo de tipos de internacao + acompanhante,
+    # usado na contagem automatica de diarias por competencia)
+    # -----------------------------------------------------------
+    @app.route("/api/tipos-diaria-clinica", methods=["GET"])
+    @login_required
+    def api_listar_tipos_diaria_clinica():
+        return jsonify(db.query("SELECT * FROM tipos_diaria_clinica ORDER BY nome"))
+
+    @app.route("/api/tipos-diaria-clinica", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_criar_tipo_diaria_clinica():
+        data = v.corpo_json()
+        novo = db.execute(
+            """INSERT INTO tipos_diaria_clinica (nome, acompanhante)
+               VALUES (%s,%s) RETURNING *""",
+            (v.texto(data.get("nome"), "nome", 80, obrigatorio=True),
+             v.booleano(data.get("acompanhante"), "acompanhante", False))
+        )
+        return jsonify(novo), 201
+
+    @app.route("/api/tipos-diaria-clinica/<int:tipo_id>", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_tipo_diaria_clinica(tipo_id):
+        data = v.corpo_json()
+        atualizado = db.execute(
+            """UPDATE tipos_diaria_clinica
+               SET nome=%s, acompanhante=%s, ativo=%s
+               WHERE id=%s RETURNING *""",
+            (v.texto(data.get("nome"), "nome", 80, obrigatorio=True),
+             v.booleano(data.get("acompanhante"), "acompanhante", False),
+             v.booleano(data.get("ativo"), "ativo", True), tipo_id)
+        )
+        if not atualizado:
+            return jsonify({"erro": "tipo de diaria nao encontrado"}), 404
+        return jsonify(atualizado)
+
+    @app.route("/api/tipos-diaria-clinica/<int:tipo_id>", methods=["DELETE"])
+    @login_required
+    @perfil_required("admin")
+    def api_excluir_tipo_diaria_clinica(tipo_id):
+        db.execute("UPDATE tipos_diaria_clinica SET ativo = FALSE WHERE id = %s", (tipo_id,))
+        return jsonify({"ok": True})
+
+    @app.route("/api/clinicas/<int:isn_clinica>/tipo-diaria", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_tipo_diaria_da_clinica(isn_clinica):
+        data = v.corpo_json()
+        tipo_diaria_id = v.inteiro(data.get("tipo_diaria_id"), "tipo_diaria_id", obrigatorio=True)
+        if isn_clinica not in UNIDADES_PERMITIDAS:
+            return jsonify({"erro": "clinica nao encontrada"}), 404
+
+        existe = db.query(
+            "SELECT id FROM tipos_diaria_clinica WHERE id = %s AND ativo = TRUE", (tipo_diaria_id,), fetchone=True
+        )
+        if not existe:
+            return jsonify({"erro": "tipo de diaria nao encontrado"}), 404
+
+        atualizado = db.execute(
+            """INSERT INTO clinica_tipo_diaria (isn_clinica, tipo_diaria_id, atualizado_em)
+               VALUES (%s, %s, NOW())
+               ON CONFLICT (isn_clinica) DO UPDATE SET tipo_diaria_id = EXCLUDED.tipo_diaria_id, atualizado_em = NOW()
+               RETURNING *""",
+            (isn_clinica, tipo_diaria_id)
         )
         return jsonify(atualizado)
 

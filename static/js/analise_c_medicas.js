@@ -117,21 +117,45 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Tabela "Dias de Internacao (Faturamento)" por competencia: cada input
+  // e um tipo de diaria cadastrado em Clinicas; a diaria de acompanhante e
+  // recalculada ao vivo a partir dos tipos marcados com acompanhante.
+  document.querySelectorAll('[id^="tabela-dias-tipo-"]').forEach((tabela) => {
+    const competencia = tabela.id.replace("tabela-dias-tipo-", "");
+    tabela.querySelectorAll(".input-dias-tipo-diaria").forEach((input) => {
+      input.addEventListener("input", () => recalcularDiariaAcompanhante(competencia));
+    });
+  });
+
+  function recalcularDiariaAcompanhante(competencia) {
+    const tabela = document.getElementById(`tabela-dias-tipo-${competencia}`);
+    let total = 0;
+    tabela.querySelectorAll(".input-dias-tipo-diaria").forEach((input) => {
+      if (input.dataset.acompanhante === "1") total += Number(input.value) || 0;
+    });
+    document.getElementById(`total-diaria-acompanhante-${competencia}`).textContent = total;
+  }
+
   // Um botao "Salvar Valores" por competencia (data-competencia identifica
-  // qual e os inputs correspondentes, sufixados com a mesma chave).
+  // a tabela correspondente, sufixada com a mesma chave).
   document.querySelectorAll(".btn-salvar-valores-faturamento").forEach((botao) => {
     botao.addEventListener("click", async () => {
       const competencia = botao.dataset.competencia;
-      const dados = {
-        dias_enfermaria: document.getElementById(`input-dias-enfermaria-${competencia}`).value,
-        dias_uti: document.getElementById(`input-dias-uti-${competencia}`).value,
-        diaria_acompanhante: document.getElementById(`input-diaria-acompanhante-${competencia}`).value,
-      };
+      const tabela = document.getElementById(`tabela-dias-tipo-${competencia}`);
+      const dias_por_tipo = {};
+      tabela.querySelectorAll(".input-dias-tipo-diaria").forEach((input) => {
+        dias_por_tipo[input.dataset.tipoDiariaId] = input.value;
+      });
+      if (!Object.keys(dias_por_tipo).length) {
+        alert("Nenhuma clínica deste mês tem tipo de diária cadastrado. Classifique as clínicas na tela Clínicas.");
+        return;
+      }
       try {
-        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/valores-faturamento/${competencia}`, {
+        const resultado = await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/valores-faturamento/${competencia}`, {
           method: "PUT",
-          body: JSON.stringify(dados),
+          body: JSON.stringify({ dias_por_tipo }),
         });
+        document.getElementById(`total-diaria-acompanhante-${competencia}`).textContent = resultado.diaria_acompanhante;
         alert("Valores salvos.");
       } catch (e) {
         alert(e.message);
