@@ -85,6 +85,11 @@
         {{ icons.icone('search') }} <span>Clínicas</span>
       </a>
       {% endif %}
+      {% if 'prescricoes' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='prescricoes' }}" href="{{ url_for('prescricoes') }}" data-nav>
+        {{ icons.icone('file-check') }} <span>Prescrições</span>
+      </a>
+      {% endif %}
       {% if 'profissionais' in paginas_permitidas %}
       <a class="sidebar-item {{ 'ativo' if active_page=='profissionais' }}" href="{{ url_for('profissionais') }}" data-nav>
         {{ icons.icone('id-card') }} <span>Profissionais</span>

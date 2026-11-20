@@ -4,6 +4,16 @@
  * (ja confirmados), prontos para faturamento e em auditoria.
  */
 
+function badgePendencias(p) {
+  const badge = p.pendencias_abertas > 0
+    ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
+    : `<span class="badge badge-ok">Sem pendência</span>`;
+  const notaFiscal = p.tem_pendencia_nota_fiscal
+    ? ` <span class="badge badge-nota-fiscal">Nota Fiscal</span>`
+    : "";
+  return badge + notaFiscal;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   carregarTudo();
 
@@ -117,9 +127,7 @@ async function carregarAguardando() {
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${badgeDestino(p.destino)}</td>
-        <td>${p.pendencias_abertas > 0
-            ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
-            : `<span class="badge badge-ok">Sem pendência</span>`}</td>
+        <td>${badgePendencias(p)}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
         <td class="acoes-linha">
@@ -161,9 +169,7 @@ async function carregarContas() {
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${badgeDestino(p.destino)}</td>
-        <td>${p.pendencias_abertas > 0
-            ? `<span class="badge badge-pendencia">${esc(p.pendencias_abertas)} aberta(s)</span>`
-            : `<span class="badge badge-ok">Sem pendência</span>`}</td>
+        <td>${badgePendencias(p)}</td>
         <td>${esc(formatarData(p.recebido_contas_medicas_em))}</td>
         <td>${esc(p.recebido_contas_medicas_usuario_nome || "-")}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
@@ -195,7 +201,7 @@ async function carregarFaturamento() {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("pronto_faturamento").toString()}`);
     document.getElementById("kpi-total-faturamento").textContent = lista.length;
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Nenhum prontuário pronto para faturamento.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário pronto para faturamento.</td></tr>`;
       return;
     }
 
@@ -205,6 +211,7 @@ async function carregarFaturamento() {
         <td>${esc(p.paciente_nome)}</td>
         <td>${esc(p.unidade_nome || "-")}</td>
         <td>${badgeDestino(p.destino)}</td>
+        <td>${badgePendencias(p)}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${esc(p.faturamento_usuario_nome || "-")}</td>
         <td>${badgeDiasAlta(p.dias_desde_alta)}</td>
@@ -219,7 +226,7 @@ async function carregarFaturamento() {
       </tr>
     `).join("");
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
   }
 }
 

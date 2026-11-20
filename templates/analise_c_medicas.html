@@ -194,7 +194,7 @@
 
       <details class="secao-recolhivel" style="margin-bottom:10px;">
         <summary><strong>Resumo de Exames</strong> &middot; {{ comp.resumo_exames | length }} classificação(ões)</summary>
-        <div style="margin-top:12px; padding-left:8px;">
+        <div style="margin-top:12px; padding-left:8px;" id="resumo-exames-{{ comp.chave }}">
           {% for r in comp.resumo_exames %}
           <details class="secao-recolhivel" style="margin-bottom:10px;">
             <summary><strong>{{ r.nome }}</strong> &middot; {{ r.quantidade }} exame(s)</summary>
@@ -203,14 +203,21 @@
                 <thead>
                   <tr>
                     <th>Exame</th>
-                    <th>Quantidade</th>
+                    <th style="width:140px;">Quantidade</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for ex in r.exames %}
                   <tr>
                     <td>{{ ex.nome }}</td>
-                    <td>{{ ex.quantidade }}</td>
+                    <td>
+                      {% if ex.isn_exame is not none %}
+                      <input type="number" min="0" class="input-quantidade-exame"
+                             data-isn-exame="{{ ex.isn_exame }}" value="{{ ex.quantidade }}">
+                      {% else %}
+                      {{ ex.quantidade }}
+                      {% endif %}
+                    </td>
                   </tr>
                   {% endfor %}
                 </tbody>
@@ -220,6 +227,11 @@
           {% else %}
           <p class="vazio-estado">Nenhum exame encontrado nesta competência.</p>
           {% endfor %}
+          {% if comp.resumo_exames %}
+          <button type="button" class="btn btn-primario btn-salvar-quantidade-exames" data-competencia="{{ comp.chave }}">
+            Salvar Quantidades
+          </button>
+          {% endif %}
         </div>
       </details>
 
@@ -284,7 +296,7 @@
                   {% if p.itens %}
                   <ul class="lista-com-marcador">
                     {% for item in p.itens %}
-                    <li>{{ item }}</li>
+                    <li class="{{ 'item-faturamento' if item.faturamento }}">{{ item.texto }}</li>
                     {% endfor %}
                   </ul>
                   {% else %}

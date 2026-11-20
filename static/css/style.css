@@ -697,6 +697,12 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
   list-style: disc;
 }
 
+.item-faturamento {
+  background: #FFF59D;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -721,6 +727,7 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
 /* Internacao com tempo total de 0 dias */
 .badge-24h { background: #FFE600; color: #D00000; font-weight: 700; }
 .badge-baixa { background: rgba(83,183,217,0.16); color: var(--cor-azul-var); }
+.badge-nota-fiscal { background: #C62828; color: #fff; }
 
 .acoes-linha { display: flex; gap: 6px; flex-wrap: wrap; }
 .acoes-linha .btn { width: auto; margin-top: 0; }

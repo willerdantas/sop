@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block titulo %}Prescrições{% endblock %}
+{% block titulo_pagina %}Prescrições{% endblock %}
+{% block subtitulo_pagina %}Catálogo de itens de prescrição (sistema hospitalar){% endblock %}
+
+{% block conteudo %}
+<div class="flex-entre mb-16">
+  <p class="texto-suave">
+    Itens lidos de t_prescricao_pep_item (sistema hospitalar), indexados aqui por texto igual. Marque "Faturamento"
+    para destacar o item na análise de Contas Médicas e incluí-lo no relatório de auditoria.
+  </p>
+  <button class="btn btn-laranja" id="btn-sincronizar-itens-prescricao" type="button">
+    {{ icons.icone('database') }} Sincronizar com Sistema Hospitalar
+  </button>
+</div>
+
+<div class="painel-filtros">
+  <div class="campo">
+    <label>Buscar</label>
+    <input type="text" id="filtro-busca" placeholder="Buscar por descrição ou código">
+  </div>
+</div>
+
+<div class="card-branco">
+  <h3>Itens cadastrados</h3>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Descrição</th>
+          <th>Código</th>
+          <th>Faturamento</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-itens-prescricao">
+        <tr><td colspan="4" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-fundo" id="modal-item-prescricao">
+  <div class="modal-caixa">
+    <button class="modal-fechar" data-fechar-modal="modal-item-prescricao">{{ icons.icone('x') }}</button>
+    <h3>Editar Item de Prescrição</h3>
+    <form id="form-item-prescricao">
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Descrição</label>
+          <input type="text" id="item-prescricao-descricao" disabled>
+          <small class="texto-suave">Lido do sistema hospitalar, não pode ser alterado aqui.</small>
+        </div>
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label>Código</label>
+          <input type="text" name="codigo" maxlength="30" placeholder="Opcional">
+        </div>
+        <div class="campo" style="grid-column: 1 / -1;">
+          <label><input type="checkbox" name="faturamento"> Faturamento</label>
+        </div>
+      </div>
+      <div class="form-acoes">
+        <button type="button" class="btn btn-ghost" data-fechar-modal="modal-item-prescricao">Cancelar</button>
+        <button type="submit" class="btn btn-primario">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="{{ url_for('static', filename='js/prescricoes.js') }}"></script>
+{% endblock %}

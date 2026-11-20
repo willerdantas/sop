@@ -68,6 +68,32 @@ CREATE TABLE IF NOT EXISTS prontuario_competencia_dias_tipo (
     PRIMARY KEY (prontuario_id, competencia, tipo_diaria_id)
 );
 
+-- Quantidade de cada exame no Resumo de Exames por competencia (contagem
+-- calculada a partir do historico, com opcao de ajuste manual na analise
+-- de Contas Medicas).
+CREATE TABLE IF NOT EXISTS prontuario_competencia_exame_quantidade (
+    prontuario_id   INTEGER NOT NULL REFERENCES prontuarios(id) ON DELETE CASCADE,
+    competencia     VARCHAR(7) NOT NULL,
+    isn_exame       BIGINT NOT NULL,
+    quantidade      INTEGER NOT NULL DEFAULT 0,
+    atualizado_em   TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (prontuario_id, competencia, isn_exame)
+);
+
+-- ---------------------------------------------------------
+-- CATALOGO DE ITENS DE PRESCRICAO (t_prescricao_pep_item.dsc_prescricao nao
+-- tem indexacao nem identificador proprio no sistema hospitalar; este
+-- catalogo local agrupa textos iguais sob um id estavel e guarda o codigo
+-- (opcional) e se o item deve ser considerado no faturamento)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS itens_prescricao_catalogo (
+    id              SERIAL PRIMARY KEY,
+    dsc_prescricao  VARCHAR(2000) NOT NULL UNIQUE,
+    codigo          VARCHAR(30),
+    faturamento     BOOLEAN NOT NULL DEFAULT FALSE,
+    atualizado_em   TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 -- ---------------------------------------------------------
 -- PERFIS (controle de acesso por pagina, gerenciavel via tela Perfis)
 -- ---------------------------------------------------------

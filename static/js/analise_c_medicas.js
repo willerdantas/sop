@@ -163,6 +163,33 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // Um botao "Salvar Quantidades" por competencia, para o Resumo de Exames:
+  // cada input e um exame (isn_exame), identificado pela mesma chave de
+  // competencia do container "resumo-exames-<competencia>".
+  document.querySelectorAll(".btn-salvar-quantidade-exames").forEach((botao) => {
+    botao.addEventListener("click", async () => {
+      const competencia = botao.dataset.competencia;
+      const container = document.getElementById(`resumo-exames-${competencia}`);
+      const quantidade_exames = {};
+      container.querySelectorAll(".input-quantidade-exame").forEach((input) => {
+        quantidade_exames[input.dataset.isnExame] = input.value;
+      });
+      if (!Object.keys(quantidade_exames).length) {
+        alert("Nenhum exame editável neste mês.");
+        return;
+      }
+      try {
+        await apiFetch(`/api/prontuarios/${PRONTUARIO_ID}/quantidade-exames/${competencia}`, {
+          method: "PUT",
+          body: JSON.stringify({ quantidade_exames }),
+        });
+        alert("Quantidades salvas.");
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  });
+
   // Um botao "Incluir Procedimento" por competencia: abre o mesmo modal,
   // marcando em qual competencia o procedimento incluido deve entrar.
   document.querySelectorAll(".btn-incluir-procedimento").forEach((botao) => {

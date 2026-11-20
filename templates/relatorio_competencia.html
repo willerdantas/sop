@@ -40,10 +40,9 @@
   .assinatura {
     margin-top: 56px;
     display: flex;
-    justify-content: space-between;
-    gap: 40px;
+    justify-content: center;
   }
-  .assinatura .campo-assinatura { flex: 1; text-align: center; }
+  .assinatura .campo-assinatura { width: 280px; text-align: center; }
   .assinatura .linha { border-top: 1px solid #333; margin-bottom: 6px; }
   .assinatura .rotulo { font-size: 12px; color: #444; }
   .rodape-geracao { margin-top: 10px; font-size: 11px; color: #777; text-align: right; }
@@ -174,26 +173,22 @@
     <tr><th>Data</th><th>Tipo</th><th>Profissional Solicitante</th><th>Profissional (Aprazamento)</th><th>Itens</th></tr>
   </thead>
   <tbody>
-    {% for p in comp.prescricoes %}
+    {% for p in prescricoes_faturamento %}
     <tr>
       <td>{{ p.dat_prescricao | data_br }}</td>
       <td>{{ p.tipo or "-" }}</td>
       <td>{{ p.profissional_nome | profissional_br(p.profissional_conselho, p.profissional_num_conselho) }}</td>
       <td>{{ p.aprazamento_nome | profissional_br(p.aprazamento_conselho, p.aprazamento_num_conselho) }}</td>
       <td>
-        {% if p.itens %}
         <ul class="lista-itens">
           {% for item in p.itens %}
-          <li>{{ item }}</li>
+          <li>{{ item.texto }}</li>
           {% endfor %}
         </ul>
-        {% else %}
-        -
-        {% endif %}
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="vazio">Nenhuma prescrição nesta competência.</td></tr>
+    <tr><td colspan="5" class="vazio">Nenhuma prescrição com itens de faturamento nesta competência.</td></tr>
     {% endfor %}
   </tbody>
 </table>

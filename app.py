@@ -514,10 +514,26 @@ def listar_prescricoes_internacao(isn_internacao):
     return rows
 
 
+def mapa_catalogo_itens_prescricao(textos):
+    """{dsc_prescricao: {"id","codigo","faturamento"}} a partir do catalogo
+    local (ver tela Prescricoes), que indexa por texto igual os itens de
+    t_prescricao_pep_item - tabela do sistema hospitalar sem indexacao nem
+    identificador proprio por item."""
+    textos = sorted({t.strip() for t in textos if t and t.strip()})
+    if not textos:
+        return {}
+    linhas = db.query(
+        "SELECT id, dsc_prescricao, codigo, faturamento FROM itens_prescricao_catalogo WHERE dsc_prescricao = ANY(%s)",
+        (textos,)
+    )
+    return {l["dsc_prescricao"]: l for l in linhas}
+
+
 def itens_prescricao(isns_prescricao_pep):
-    """{isn_prescricao_pep: [dsc_prescricao, ...]} (t_prescricao_pep_item),
-    so os itens ativos (flg_ativo = 'S'); consulta em lote em vez de uma
-    por prescricao."""
+    """{isn_prescricao_pep: [{"texto","codigo","faturamento"}, ...]}
+    (t_prescricao_pep_item), so os itens ativos (flg_ativo = 'S'); consulta
+    em lote em vez de uma por prescricao. Cada item e enriquecido com o
+    codigo/faturamento cadastrados no catalogo local (ver tela Prescricoes)."""
     isns = sorted({int(i) for i in isns_prescricao_pep if i is not None})
     if not isns:
         return {}
@@ -528,9 +544,16 @@ def itens_prescricao(isns_prescricao_pep):
            ORDER BY isn_prescricao_pep""",
         (isns,)
     )
+    mapa_catalogo = mapa_catalogo_itens_prescricao(r["dsc_prescricao"] for r in rows)
     mapa = {}
     for r in rows:
-        mapa.setdefault(int(r["isn_prescricao_pep"]), []).append(r["dsc_prescricao"])
+        texto = (r["dsc_prescricao"] or "").strip()
+        catalogo = mapa_catalogo.get(texto)
+        mapa.setdefault(int(r["isn_prescricao_pep"]), []).append({
+            "texto": r["dsc_prescricao"],
+            "codigo": catalogo["codigo"] if catalogo else None,
+            "faturamento": bool(catalogo["faturamento"]) if catalogo else False,
+        })
     return mapa
 
 
@@ -850,27 +873,34 @@ def mapa_classificacao_exames(isns_exame):
     return {int(r["isn_exame"]): r["nome"] for r in rows}
 
 
-def resumir_exames_por_classificacao(exames):
+def resumir_exames_por_classificacao(exames, overrides=None):
     """Agrupa a lista de exames (ja com 'classificacao' anexada por quem
     chamou, ver mapa_classificacao_exames) pela classificacao. Dentro de
-    cada classificacao, resume por nome de exame, contando quantas vezes
-    cada um aparece no historico (sem trazer datas individuais)."""
+    cada classificacao, resume por exame (chave isn_exame), contando quantas
+    vezes cada um aparece no historico (sem trazer datas individuais).
+    'overrides' (opcional) e um dict isn_exame -> quantidade, usado na
+    analise de Contas Medicas para permitir ajuste manual da contagem."""
+    overrides = overrides or {}
     grupos = {}
     for ex in exames:
         classificacao = ex.get("classificacao") or "Sem classificação"
         nome_exame = ex["dsc_exame"] or "Sem nome"
+        isn_exame = ex.get("isn_exame")
+        chave = isn_exame if isn_exame is not None else nome_exame
         contagem_exames = grupos.setdefault(classificacao, {})
-        contagem_exames[nome_exame] = contagem_exames.get(nome_exame, 0) + 1
+        linha = contagem_exames.setdefault(chave, {"isn_exame": isn_exame, "nome": nome_exame, "quantidade": 0})
+        linha["quantidade"] += 1
 
     resultado = []
     for classificacao, contagem_exames in grupos.items():
-        exames_resumidos = sorted(
-            [{"nome": nome, "quantidade": qtd} for nome, qtd in contagem_exames.items()],
-            key=lambda r: r["nome"]
-        )
+        exames_resumidos = list(contagem_exames.values())
+        for r in exames_resumidos:
+            if r["isn_exame"] is not None and r["isn_exame"] in overrides:
+                r["quantidade"] = overrides[r["isn_exame"]]
+        exames_resumidos.sort(key=lambda r: r["nome"])
         resultado.append({
             "nome": classificacao,
-            "quantidade": sum(contagem_exames.values()),
+            "quantidade": sum(r["quantidade"] for r in exames_resumidos),
             "exames": exames_resumidos,
         })
     return sorted(resultado, key=lambda r: r["nome"])
@@ -1185,6 +1215,7 @@ PAGINAS_SELECIONAVEIS = [
     ("pendencias", "Pendências"),
     ("painel", "Painel Tempo Real"),
     ("clinicas", "Clínicas"),
+    ("prescricoes", "Prescrições"),
     ("profissionais", "Profissionais"),
     ("procedimentos", "Procedimentos (SIGTAP)"),
     ("painel_monitoramento_sop", "Monitoramento SOP"),
@@ -1200,6 +1231,7 @@ ENDPOINT_PARA_PAGINAS = {
     "pendencias": ("pendencias",),
     "painel": ("painel",),
     "clinicas": ("clinicas",),
+    "prescricoes": ("prescricoes",),
     "profissionais": ("profissionais",),
     "procedimentos": ("procedimentos",),
     "painel_monitoramento_sop": ("painel_monitoramento_sop",),
@@ -1221,6 +1253,7 @@ ENDPOINT_PARA_PAGINAS = {
     "api_exames_pendencia_prontuario": ("sop", "contas_medicas"),
     "api_confirmar_recebimento_prontuario": ("contas_medicas",),
     "api_editar_valores_faturamento": ("contas_medicas",),
+    "api_editar_quantidade_exame_resumo": ("contas_medicas",),
     "api_registrar_analise_auditoria": ("contas_medicas",),
     "api_confirmar_recebimento_unidade": ("unidade",),
     "api_historico_prontuario": ("sop", "unidade", "contas_medicas"),
@@ -1236,6 +1269,9 @@ ENDPOINT_PARA_PAGINAS = {
     "api_painel_monitoramento_contas_medicas": ("painel_monitoramento_contas_medicas",),
     "api_listar_profissionais": ("profissionais",),
     "api_listar_procedimentos_sigtap": ("procedimentos", "contas_medicas"),
+    "api_listar_itens_prescricao": ("prescricoes",),
+    "api_sincronizar_itens_prescricao": ("prescricoes",),
+    "api_editar_item_prescricao": ("prescricoes",),
     "api_listar_procedimentos_prontuario": ("unidade", "contas_medicas"),
     "api_incluir_procedimento_prontuario": ("contas_medicas",),
     "api_excluir_procedimento_prontuario": ("contas_medicas",),
@@ -1620,6 +1656,15 @@ def register_routes(app):
         for d in dias_tipo_salvos:
             mapa_dias_tipo_salvos.setdefault(d["competencia"], {})[d["tipo_diaria_id"]] = d["dias"]
 
+        quantidade_exames_salvos = db.query(
+            """SELECT competencia, isn_exame, quantidade
+               FROM prontuario_competencia_exame_quantidade WHERE prontuario_id = %s""",
+            (prontuario_id,)
+        )
+        mapa_quantidade_exames_salvos = {}
+        for q in quantidade_exames_salvos:
+            mapa_quantidade_exames_salvos.setdefault(q["competencia"], {})[int(q["isn_exame"])] = q["quantidade"]
+
         historico_leitos_dividido = dividir_leitos_por_competencia(historico_leitos)
         procedimentos_por_competencia = agrupar_por_chave_competencia(procedimentos, "competencia")
 
@@ -1638,7 +1683,9 @@ def register_routes(app):
         competencias.sort(key=lambda c: c["chave"], reverse=True)
 
         for comp in competencias:
-            comp["resumo_exames"] = resumir_exames_por_classificacao(comp["exames"])
+            comp["resumo_exames"] = resumir_exames_por_classificacao(
+                comp["exames"], mapa_quantidade_exames_salvos.get(comp["chave"], {})
+            )
             comp["procedimentos"] = procedimentos_por_competencia.get(comp["chave"], [])
             dias_por_tipo = somar_dias_por_tipo_diaria(comp["historico_leitos"])
             salvos = mapa_dias_tipo_salvos.get(comp["chave"], {})
@@ -1719,6 +1766,11 @@ def register_routes(app):
             ex for ex in comp["exames"]
             if not (ex.get("classificacao") and "laborat" in ex["classificacao"].lower())
         ]
+        prescricoes_faturamento = []
+        for p in comp["prescricoes"]:
+            itens_faturamento = [item for item in p["itens"] if item["faturamento"]]
+            if itens_faturamento:
+                prescricoes_faturamento.append({**p, "itens": itens_faturamento})
 
         return render_template(
             "relatorio_competencia.html",
@@ -1726,6 +1778,7 @@ def register_routes(app):
             dat_nascimento=contexto["dat_nascimento"], idade=contexto["idade"],
             dsc_mae=contexto["dsc_mae"], num_cpf=contexto["num_cpf"], num_cns=contexto["num_cns"],
             comp=comp, exames_sem_laboratorio=exames_sem_laboratorio,
+            prescricoes_faturamento=prescricoes_faturamento,
             gerado_em=agora_local(),
         )
 
@@ -1757,6 +1810,11 @@ def register_routes(app):
     def procedimentos():
         return render_template("procedimentos.html", active_page="procedimentos")
 
+    @app.route("/prescricoes")
+    @login_required
+    def prescricoes():
+        return render_template("prescricoes.html", active_page="prescricoes")
+
     # -----------------------------------------------------------
     # API - PRONTUARIOS / FLUXO
     # -----------------------------------------------------------
@@ -1777,6 +1835,12 @@ def register_routes(app):
             SELECT p.*,
                 (SELECT COUNT(*) FROM pendencias pe
                     WHERE pe.prontuario_id = p.id AND pe.status != 'confirmada') AS pendencias_abertas,
+                (SELECT EXISTS (
+                    SELECT 1 FROM pendencias pe
+                    JOIN tipos_pendencia tp ON tp.id = pe.tipo_pendencia_id
+                    WHERE pe.prontuario_id = p.id AND pe.status != 'confirmada'
+                      AND tp.descricao ILIKE %s
+                )) AS tem_pendencia_nota_fiscal,
                 (SELECT MAX(m.data_movimentacao) FROM movimentacoes m
                     WHERE m.prontuario_id = p.id AND m.destino = 'sop') AS entrou_sop_em,
                 (SELECT MAX(m.data_movimentacao) FROM movimentacoes m
@@ -1794,7 +1858,7 @@ def register_routes(app):
             FROM prontuarios p
             WHERE 1=1
         """
-        params = []
+        params = ["%nota fiscal%"]
         if status:
             sql += " AND p.status_atual = %s"
             params.append(status)
@@ -2017,6 +2081,41 @@ def register_routes(app):
         )
         return jsonify({"dias_por_tipo": salvo,
                          "diaria_acompanhante": sum(l["dias"] for l in salvo if l["acompanhante"])})
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/quantidade-exames/<competencia>", methods=["PUT"])
+    @login_required
+    def api_editar_quantidade_exame_resumo(prontuario_id, competencia):
+        """Salva um ajuste manual na quantidade de exames do Resumo de
+        Exames do mes, um valor por exame (isn_exame)."""
+        if not COMPETENCIA_VALIDA.match(competencia):
+            return jsonify({"erro": "competencia invalida"}), 400
+        data = v.corpo_json()
+        _, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
+
+        quantidade_exames = data.get("quantidade_exames")
+        if not isinstance(quantidade_exames, dict) or not quantidade_exames:
+            return jsonify({"erro": "quantidade_exames e obrigatorio"}), 400
+
+        for isn_exame, quantidade in quantidade_exames.items():
+            db.execute(
+                """INSERT INTO prontuario_competencia_exame_quantidade
+                       (prontuario_id, competencia, isn_exame, quantidade)
+                   VALUES (%s,%s,%s,%s)
+                   ON CONFLICT (prontuario_id, competencia, isn_exame) DO UPDATE SET
+                       quantidade = EXCLUDED.quantidade, atualizado_em = NOW()""",
+                (prontuario_id, competencia,
+                 v.inteiro(isn_exame, "isn_exame", obrigatorio=True),
+                 v.inteiro(quantidade, "quantidade", obrigatorio=True, minimo=0, maximo=3650))
+            )
+
+        salvo = db.query(
+            """SELECT isn_exame, quantidade FROM prontuario_competencia_exame_quantidade
+               WHERE prontuario_id = %s AND competencia = %s""",
+            (prontuario_id, competencia)
+        )
+        return jsonify(salvo)
 
     @app.route("/api/prontuarios/<int:prontuario_id>/registrar-analise-auditoria", methods=["POST"])
     @login_required
@@ -2792,6 +2891,76 @@ def register_routes(app):
     def api_ativar_procedimento_sigtap(procedimento_id):
         db.execute("UPDATE procedimentos_sigtap SET ativo = TRUE WHERE id = %s", (procedimento_id,))
         return jsonify({"ok": True})
+
+    # -----------------------------------------------------------
+    # API - ITENS DE PRESCRICAO (catalogo local que indexa por texto igual
+    # os itens de t_prescricao_pep_item.dsc_prescricao, tabela do sistema
+    # hospitalar sem indexacao nem identificador proprio por item)
+    # -----------------------------------------------------------
+    @app.route("/api/itens-prescricao", methods=["GET"])
+    @login_required
+    def api_listar_itens_prescricao():
+        busca = v.termo_busca(request.args.get("q"))
+        sql = "SELECT * FROM itens_prescricao_catalogo"
+        params = []
+        if busca:
+            sql += " WHERE dsc_prescricao ILIKE %s OR codigo ILIKE %s"
+            params += [f"%{busca}%", f"%{busca}%"]
+        sql += " ORDER BY dsc_prescricao LIMIT 300"
+        return jsonify(db.query(sql, params))
+
+    @app.route("/api/itens-prescricao/sincronizar", methods=["POST"])
+    @login_required
+    @perfil_required("admin")
+    def api_sincronizar_itens_prescricao():
+        """Busca no sistema hospitalar os textos distintos de
+        t_prescricao_pep_item.dsc_prescricao (sem indexacao: a consulta pode
+        ser lenta) e cria no catalogo local os que ainda nao existem."""
+        try:
+            rows = db.query_integra(
+                """SELECT DISTINCT dsc_prescricao FROM t_prescricao_pep_item
+                   WHERE flg_ativo = 'S' AND dsc_prescricao IS NOT NULL"""
+            )
+        except ERROS_TABELA_OPCIONAL as exc:
+            return resposta_tabela_indisponivel("Itens de prescrição", exc)
+        except ERROS_INTEGRA_LENTO as exc:
+            return resposta_consulta_lenta("Itens de prescrição", exc)
+
+        novos = 0
+        ignorados = 0
+        for r in rows:
+            texto = (r["dsc_prescricao"] or "").strip()[:2000]
+            if not texto:
+                continue
+            try:
+                inserido = db.execute(
+                    """INSERT INTO itens_prescricao_catalogo (dsc_prescricao)
+                       VALUES (%s) ON CONFLICT (dsc_prescricao) DO NOTHING RETURNING id""",
+                    (texto,)
+                )
+            except psycopg2.Error as exc:
+                db.get_conn().rollback()
+                print(f"[aviso] item de prescricao ignorado na sincronizacao: {exc.pgerror or exc}".strip())
+                ignorados += 1
+                continue
+            if inserido:
+                novos += 1
+        return jsonify({"novos": novos, "lidos": len(rows), "ignorados": ignorados})
+
+    @app.route("/api/itens-prescricao/<int:item_id>", methods=["PUT"])
+    @login_required
+    @perfil_required("admin")
+    def api_editar_item_prescricao(item_id):
+        data = v.corpo_json()
+        atualizado = db.execute(
+            """UPDATE itens_prescricao_catalogo SET codigo=%s, faturamento=%s, atualizado_em=NOW()
+               WHERE id=%s RETURNING *""",
+            (v.texto(data.get("codigo"), "codigo", 30),
+             v.booleano(data.get("faturamento"), "faturamento", False), item_id)
+        )
+        if not atualizado:
+            return jsonify({"erro": "item nao encontrado"}), 404
+        return jsonify(atualizado)
 
     # -----------------------------------------------------------
     # API - PROCEDIMENTOS DE UM PRONTUARIO (incluir/excluir em Contas Medicas)
