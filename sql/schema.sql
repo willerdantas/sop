@@ -120,12 +120,36 @@ ON CONFLICT (nome) DO NOTHING;
 
 INSERT INTO perfil_paginas (perfil_id, pagina)
 SELECT id, pagina FROM perfis,
-    unnest(ARRAY['dashboard','unidade','sop','contas_medicas','pendencias','painel','clinicas','profissionais']) AS pagina
+    unnest(ARRAY['dashboard','unidade','sop','contas_medicas','nac','pendencias','painel','clinicas','profissionais']) AS pagina
 WHERE nome IN ('admin', 'sop', 'contas_medicas')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO perfil_paginas (perfil_id, pagina)
 SELECT id, 'unidade' FROM perfis WHERE nome = 'operador'
+ON CONFLICT DO NOTHING;
+
+-- ---------------------------------------------------------
+-- SESSOES PERMITIDAS (controle de acesso por secao dentro de uma pagina,
+-- ex: Contas Medicas tem secoes Aguardando/Contas/Faturamento/Auditoria/
+-- Faturados/Arquivado; gerenciavel via tela Perfis). Um perfil sem NENHUMA
+-- linha aqui para uma pagina que ele ja acessa continua vendo todas as
+-- secoes dela normalmente (ver backfill abaixo) - so fica restrito quando
+-- um admin salva explicitamente um subconjunto pela tela Perfis.
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS perfil_sessoes (
+    perfil_id   INTEGER NOT NULL REFERENCES perfis(id) ON DELETE CASCADE,
+    sessao      VARCHAR(40) NOT NULL,
+    PRIMARY KEY (perfil_id, sessao)
+);
+
+-- Perfis que ja tem acesso a pagina contas_medicas comecam com acesso a
+-- todas as sessoes dela, para nao quebrar quem ja usava a pagina antes das
+-- sessoes existirem.
+INSERT INTO perfil_sessoes (perfil_id, sessao)
+SELECT DISTINCT pp.perfil_id, s.sessao
+FROM perfil_paginas pp
+CROSS JOIN unnest(ARRAY['aguardando','contas','faturamento','auditoria','faturados','arquivado']) AS s(sessao)
+WHERE pp.pagina = 'contas_medicas'
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------
@@ -188,7 +212,7 @@ CREATE TABLE IF NOT EXISTS prontuarios (
     data_internacao    DATE,
     data_alta          DATE,
     status_atual       VARCHAR(30) NOT NULL DEFAULT 'unidade',
-        -- unidade | sop | contas_medicas | pronto_faturamento | auditoria | finalizado
+        -- unidade | sop | contas_medicas | pronto_faturamento | auditoria | finalizado | nac
     prioridade         VARCHAR(10) NOT NULL DEFAULT 'normal', -- normal, urgente
     localizacao_fisica VARCHAR(120),          -- prateleira/armario/setor onde esta fisicamente
     integra_isn_internacao_leito BIGINT UNIQUE, -- isn_internacao_leito de origem (altas ISIVITA), evita reimportar
@@ -196,6 +220,7 @@ CREATE TABLE IF NOT EXISTS prontuarios (
     recebido_contas_medicas_em TIMESTAMP, -- confirmacao de entrega ao chegar em contas_medicas (null = aguardando)
     recebido_contas_medicas_usuario_id INTEGER REFERENCES usuarios(id), -- quem confirmou a entrega
     recebido_unidade_em TIMESTAMP, -- confirmacao de entrega ao chegar na unidade vindo do SOP (null = aguardando)
+    recebido_nac_em     TIMESTAMP, -- confirmacao de entrega ao chegar no NAC, vindo do arquivamento (null = aguardando)
     dias_enfermaria     INTEGER, -- dias de internacao em enfermaria p/ faturamento (null = usar somatorio calculado)
     dias_uti            INTEGER, -- dias de internacao em UTI p/ faturamento (null = usar somatorio calculado)
     diaria_acompanhante INTEGER, -- dias de diaria de acompanhante p/ faturamento (null = usar somatorio calculado)
@@ -211,6 +236,7 @@ ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS destino VARCHAR(60);
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_contas_medicas_em TIMESTAMP;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_contas_medicas_usuario_id INTEGER REFERENCES usuarios(id);
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_unidade_em TIMESTAMP;
+ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS recebido_nac_em TIMESTAMP;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS dias_enfermaria INTEGER;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS dias_uti INTEGER;
 ALTER TABLE prontuarios ADD COLUMN IF NOT EXISTS diaria_acompanhante INTEGER;

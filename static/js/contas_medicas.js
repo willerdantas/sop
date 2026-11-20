@@ -106,10 +106,12 @@ function carregarTudo() {
   carregarFaturamento();
   carregarAuditoria();
   carregarFaturados();
+  carregarArquivado();
 }
 
 async function carregarAguardando() {
   const tbody = document.getElementById("tbody-aguardando");
+  if (!tbody) return;
   const contador = document.getElementById("contador-aguardando");
   try {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("contas_medicas").toString()}`);
@@ -153,10 +155,12 @@ async function confirmarRecebimento(id) {
 
 async function carregarContas() {
   const tbody = document.getElementById("tbody-contas");
+  if (!tbody) return;
   try {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("contas_medicas").toString()}`);
     const confirmados = lista.filter((p) => p.recebido_contas_medicas_em);
-    document.getElementById("kpi-total-contas").textContent = lista.length;
+    const kpi = document.getElementById("kpi-total-contas");
+    if (kpi) kpi.textContent = lista.length;
 
     if (!confirmados.length) {
       tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário confirmado em Contas Médicas.</td></tr>`;
@@ -197,9 +201,11 @@ async function analisarEMigrarFaturamento(id) {
 
 async function carregarFaturamento() {
   const tbody = document.getElementById("tbody-faturamento");
+  if (!tbody) return;
   try {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("pronto_faturamento").toString()}`);
-    document.getElementById("kpi-total-faturamento").textContent = lista.length;
+    const kpi = document.getElementById("kpi-total-faturamento");
+    if (kpi) kpi.textContent = lista.length;
     if (!lista.length) {
       tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário pronto para faturamento.</td></tr>`;
       return;
@@ -245,6 +251,7 @@ async function prontuarioFaturado(id) {
 
 async function carregarFaturados() {
   const tbody = document.getElementById("tbody-faturados");
+  if (!tbody) return;
   try {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("finalizado").toString()}`);
     if (!lista.length) {
@@ -260,6 +267,48 @@ async function carregarFaturados() {
         <td>${badgeDestino(p.destino)}</td>
         <td>${esc(formatarData(p.atualizado_em))}</td>
         <td>${esc(p.finalizado_usuario_nome || "-")}</td>
+        <td class="acoes-linha">
+          <button class="btn btn-outline btn-sm" onclick="location.href='/analise_c_medicas/${esc(p.id)}'">Analisar</button>
+          <button class="btn btn-secundario btn-sm" onclick="arquivarProntuario(${esc(p.id)})">Arquivar</button>
+        </td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Erro ao carregar: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function arquivarProntuario(id) {
+  if (!confirm("Arquivar este prontuário? Ele será enviado para o NAC.")) return;
+  try {
+    await apiFetch(`/api/prontuarios/${id}/mover`, {
+      method: "POST",
+      body: JSON.stringify({ destino: "nac", observacao: "Arquivado por Contas Médicas" }),
+    });
+    carregarTudo();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function carregarArquivado() {
+  const tbody = document.getElementById("tbody-arquivado");
+  if (!tbody) return;
+  try {
+    const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("nac").toString()}`);
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="vazio-estado">Nenhum prontuário arquivado ainda.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map((p) => `
+      <tr>
+        <td><strong>${esc(p.numero_prontuario)}</strong>${etiqueta24h(p.internacao_total_dias)}</td>
+        <td>${esc(p.paciente_nome)}</td>
+        <td>${esc(p.unidade_nome || "-")}</td>
+        <td>${badgeDestino(p.destino)}</td>
+        <td>${esc(formatarData(p.atualizado_em))}</td>
+        <td>${esc(p.nac_usuario_nome || "-")}</td>
         <td class="acoes-linha">
           <button class="btn btn-outline btn-sm" onclick="location.href='/analise_c_medicas/${esc(p.id)}'">Analisar</button>
         </td>
@@ -298,9 +347,11 @@ async function enviarParaAuditoria(id) {
 
 async function carregarAuditoria() {
   const tbody = document.getElementById("tbody-auditoria");
+  if (!tbody) return;
   try {
     const lista = await apiFetch(`/api/prontuarios?${construirParamsFiltro("auditoria").toString()}`);
-    document.getElementById("kpi-total-auditoria").textContent = lista.length;
+    const kpi = document.getElementById("kpi-total-auditoria");
+    if (kpi) kpi.textContent = lista.length;
     if (!lista.length) {
       tbody.innerHTML = `<tr><td colspan="9" class="vazio-estado">Nenhum prontuário em auditoria.</td></tr>`;
       return;

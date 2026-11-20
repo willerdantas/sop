@@ -26,20 +26,27 @@
   <button class="btn btn-laranja" id="btn-novo-prontuario-contas" type="button">
     {{ icons.icone('plus') }} Novo Prontuário
   </button>
+  {% if 'contas' in sessoes_permitidas %}
   <div class="kpi-destaque">
     <div class="kpi-label">EM CONTAS MÉDICAS AGORA</div>
     <div class="kpi-valor" id="kpi-total-contas">--</div>
   </div>
+  {% endif %}
+  {% if 'faturamento' in sessoes_permitidas %}
   <div class="kpi-destaque">
     <div class="kpi-label">EM FATURAMENTO</div>
     <div class="kpi-valor" id="kpi-total-faturamento">--</div>
   </div>
+  {% endif %}
+  {% if 'auditoria' in sessoes_permitidas %}
   <div class="kpi-destaque">
     <div class="kpi-label">EM AUDITORIA</div>
     <div class="kpi-valor" id="kpi-total-auditoria">--</div>
   </div>
+  {% endif %}
 </div>
 
+{% if 'aguardando' in sessoes_permitidas %}
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Prontuários Enviados pelo SOP</h3>
@@ -71,7 +78,9 @@
     </table>
   </div>
 </div>
+{% endif %}
 
+{% if 'contas' in sessoes_permitidas %}
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Prontuários em Contas Médicas</h3>
@@ -98,7 +107,9 @@
     </table>
   </div>
 </div>
+{% endif %}
 
+{% if 'faturamento' in sessoes_permitidas %}
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Prontuários em Faturamento</h3>
@@ -125,7 +136,9 @@
     </table>
   </div>
 </div>
+{% endif %}
 
+{% if 'auditoria' in sessoes_permitidas %}
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Prontuários em Auditoria</h3>
@@ -152,7 +165,9 @@
     </table>
   </div>
 </div>
+{% endif %}
 
+{% if 'faturados' in sessoes_permitidas %}
 <div class="card-branco">
   <div class="flex-entre">
     <h3>Prontuários Faturados</h3>
@@ -177,6 +192,37 @@
     </table>
   </div>
 </div>
+{% endif %}
+
+{% if 'arquivado' in sessoes_permitidas %}
+<div class="card-branco">
+  <div class="flex-entre">
+    <h3>Arquivado</h3>
+    {{ exportar.botoes('tbody-arquivado', 'Arquivado', 'prontuarios_arquivados') }}
+  </div>
+  <p class="texto-suave" style="margin-top:-6px; margin-bottom:12px;">
+    Prontuários arquivados, tramitados para o NAC.
+  </p>
+  <div class="tabela-wrap">
+    <table class="tabela-padrao">
+      <thead>
+        <tr>
+          <th>Nº Prontuário</th>
+          <th>Paciente</th>
+          <th>Unidade</th>
+          <th>Destino</th>
+          <th>Arquivado em</th>
+          <th>Arquivado por</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-arquivado">
+        <tr><td colspan="7" class="vazio-estado">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 <!-- Modal novo prontuario direto em contas medicas -->
 <div class="modal-fundo" id="modal-novo-prontuario-contas">

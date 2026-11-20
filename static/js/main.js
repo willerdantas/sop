@@ -271,6 +271,7 @@ const STATUS_BADGE_CLASSE = {
   pronto_faturamento: "badge-faturamento",
   auditoria: "badge-auditoria",
   finalizado: "badge-finalizado",
+  nac: "badge-nac",
 };
 
 const STATUS_LABEL_JS = {
@@ -280,6 +281,7 @@ const STATUS_LABEL_JS = {
   pronto_faturamento: "Pronto p/ Faturamento",
   auditoria: "Auditoria",
   finalizado: "Finalizado",
+  nac: "NAC",
 };
 
 function badgeStatus(status) {

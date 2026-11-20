@@ -53,6 +53,23 @@
           {% endfor %}
         </div>
       </div>
+      {% set pagina_labels = dict(paginas_disponiveis) %}
+      {% for pagina_chave, sessoes in sessoes_disponiveis.items() %}
+      <div class="campo">
+        <label>Sessões permitidas em "{{ pagina_labels.get(pagina_chave, pagina_chave) }}"</label>
+        <small class="texto-suave" style="display:block; margin-bottom:8px;">
+          Sem nenhuma marcada, o perfil vê todas as sessões desta página.
+        </small>
+        <div class="form-grid" style="gap:10px 18px;">
+          {% for chave, rotulo in sessoes %}
+          <label style="display:flex; align-items:center; gap:8px; font-weight:400; font-size:13.5px;">
+            <input type="checkbox" name="sessoes" value="{{ chave }}" style="width:auto;">
+            {{ rotulo }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
       <div class="campo" id="campo-ativo-perfil" style="display:none;">
         <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
           <input type="checkbox" name="ativo" style="width:auto;" checked>

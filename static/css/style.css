@@ -728,6 +728,7 @@ table.tabela-padrao tbody tr:hover { background: #FAFBFB; }
 .badge-24h { background: #FFE600; color: #D00000; font-weight: 700; }
 .badge-baixa { background: rgba(83,183,217,0.16); color: var(--cor-azul-var); }
 .badge-nota-fiscal { background: #C62828; color: #fff; }
+.badge-nac { background: rgba(94,53,177,0.14); color: #5E35B1; }
 
 .acoes-linha { display: flex; gap: 6px; flex-wrap: wrap; }
 .acoes-linha .btn { width: auto; margin-top: 0; }

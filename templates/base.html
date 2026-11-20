@@ -60,6 +60,11 @@
         {{ icons.icone('file-check') }} <span>Contas Médicas</span>
       </a>
       {% endif %}
+      {% if 'nac' in paginas_permitidas %}
+      <a class="sidebar-item {{ 'ativo' if active_page=='nac' }}" href="{{ url_for('nac') }}" data-nav>
+        {{ icons.icone('archive') }} <span>NAC</span>
+      </a>
+      {% endif %}
       {% if 'pendencias' in paginas_permitidas %}
       <a class="sidebar-item {{ 'ativo' if active_page=='pendencias' }}" href="{{ url_for('pendencias') }}" data-nav>
         {{ icons.icone('alert') }} <span>Tipos de Pendência</span>

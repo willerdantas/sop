@@ -64,6 +64,7 @@ FLUXO_ORDEM = [
     "pronto_faturamento",
     "auditoria",
     "finalizado",
+    "nac",
 ]
 
 STATUS_LABEL = {
@@ -73,6 +74,7 @@ STATUS_LABEL = {
     "pronto_faturamento": "Pronto p/ Faturamento",
     "auditoria": "Auditoria",
     "finalizado": "Finalizado",
+    "nac": "NAC",
 }
 
 # Altas (sistema hospitalar ISIVITA): isn_destino em t_destino -
@@ -1212,6 +1214,7 @@ PAGINAS_SELECIONAVEIS = [
     ("unidade", "Unidade"),
     ("sop", "SOP"),
     ("contas_medicas", "Contas Médicas"),
+    ("nac", "NAC"),
     ("pendencias", "Pendências"),
     ("painel", "Painel Tempo Real"),
     ("clinicas", "Clínicas"),
@@ -1228,6 +1231,7 @@ ENDPOINT_PARA_PAGINAS = {
     "unidade": ("unidade",),
     "sop": ("sop",),
     "contas_medicas": ("contas_medicas",),
+    "nac": ("nac",),
     "pendencias": ("pendencias",),
     "painel": ("painel",),
     "clinicas": ("clinicas",),
@@ -1238,10 +1242,10 @@ ENDPOINT_PARA_PAGINAS = {
     "painel_monitoramento_contas_medicas": ("painel_monitoramento_contas_medicas",),
     "analise_prontuario": ("sop",),
     "analise_unidade_prontuario": ("unidade",),
-    "analise_c_medicas_prontuario": ("contas_medicas",),
-    "relatorio_competencia_contas_medicas": ("contas_medicas",),
-    "api_listar_prontuarios": ("sop", "unidade", "contas_medicas"),
-    "api_obter_prontuario": ("sop", "unidade", "contas_medicas"),
+    "analise_c_medicas_prontuario": ("contas_medicas", "nac"),
+    "relatorio_competencia_contas_medicas": ("contas_medicas", "nac"),
+    "api_listar_prontuarios": ("sop", "unidade", "contas_medicas", "nac"),
+    "api_obter_prontuario": ("sop", "unidade", "contas_medicas", "nac"),
     "api_buscar_internacoes_prontuario": ("sop", "contas_medicas"),
     "api_registrar_internacao": ("sop",),
     "api_registrar_internacao_contas_medicas": ("contas_medicas",),
@@ -1256,7 +1260,8 @@ ENDPOINT_PARA_PAGINAS = {
     "api_editar_quantidade_exame_resumo": ("contas_medicas",),
     "api_registrar_analise_auditoria": ("contas_medicas",),
     "api_confirmar_recebimento_unidade": ("unidade",),
-    "api_historico_prontuario": ("sop", "unidade", "contas_medicas"),
+    "api_confirmar_recebimento_nac": ("nac",),
+    "api_historico_prontuario": ("sop", "unidade", "contas_medicas", "nac"),
     "api_listar_altas": ("sop",),
     "api_registrar_alta": ("sop",),
     "api_listar_pendencias": ("sop", "unidade", "pendencias", "contas_medicas"),
@@ -1277,6 +1282,37 @@ ENDPOINT_PARA_PAGINAS = {
     "api_excluir_procedimento_prontuario": ("contas_medicas",),
 }
 
+# Secoes dentro de uma pagina que podem ser restritas por perfil (tela
+# Perfis), alem do controle por pagina acima. Cada pagina listada aqui tem
+# suas secoes gravadas em perfil_sessoes; uma pagina ausente daqui nao tem
+# granularidade por secao (mostra tudo para quem acessa a pagina).
+SESSOES_SELECIONAVEIS = {
+    "contas_medicas": [
+        ("aguardando", "Prontuários Enviados pelo SOP"),
+        ("contas", "Prontuários em Contas Médicas"),
+        ("faturamento", "Prontuários em Faturamento"),
+        ("auditoria", "Prontuários em Auditoria"),
+        ("faturados", "Prontuários Faturados"),
+        ("arquivado", "Arquivado"),
+    ],
+}
+SESSOES_VALIDAS = {chave: label for lista in SESSOES_SELECIONAVEIS.values() for chave, label in lista}
+
+
+def sessoes_efetivas_permitidas(sessoes_configuradas):
+    """Para cada pagina com secoes (SESSOES_SELECIONAVEIS), um perfil que
+    nao tenha NENHUMA secao dela configurada em perfil_sessoes ve todas as
+    secoes dessa pagina (compatibilidade com perfis criados antes das
+    secoes existirem); so fica restrito as secoes marcadas quando pelo
+    menos uma delas foi explicitamente salva pela tela Perfis."""
+    configuradas = set(sessoes_configuradas)
+    efetivas = set()
+    for chaves_da_pagina in (dict.fromkeys(c for c, _ in lista) for lista in SESSOES_SELECIONAVEIS.values()):
+        chaves_da_pagina = set(chaves_da_pagina)
+        intersecao = configuradas & chaves_da_pagina
+        efetivas |= intersecao if intersecao else chaves_da_pagina
+    return efetivas
+
 # Endpoints de referencia (somente leitura, sem dado sensivel por registro)
 # liberados para qualquer usuario autenticado, independente das paginas do perfil.
 ENDPOINTS_SEMPRE_PERMITIDOS = {
@@ -1294,6 +1330,18 @@ def paginas_do_perfil(nome_perfil):
         return []
     rows = db.query("SELECT pagina FROM perfil_paginas WHERE perfil_id = %s", (perfil_row["id"],))
     return [r["pagina"] for r in rows]
+
+
+def sessoes_do_perfil(nome_perfil):
+    """Lista as sessoes liberadas (ver SESSOES_SELECIONAVEIS) para um perfil
+    (vazio se nao existir/inativo)."""
+    perfil_row = db.query(
+        "SELECT id FROM perfis WHERE nome = %s AND ativo = TRUE", (nome_perfil,), fetchone=True
+    )
+    if not perfil_row:
+        return []
+    rows = db.query("SELECT sessao FROM perfil_sessoes WHERE perfil_id = %s", (perfil_row["id"],))
+    return [r["sessao"] for r in rows]
 
 
 def primeira_pagina_permitida(paginas_do_usuario=None):
@@ -1349,7 +1397,7 @@ def destino_interno(url):
 DESTINOS_POR_PAGINA = {
     "unidade": {"sop"},
     "sop": {"sop", "unidade", "contas_medicas"},
-    "contas_medicas": {"sop", "pronto_faturamento", "auditoria", "finalizado"},
+    "contas_medicas": {"sop", "pronto_faturamento", "auditoria", "finalizado", "nac"},
 }
 
 
@@ -1487,6 +1535,9 @@ def register_routes(app):
                 session["paginas_permitidas"] = (
                     [] if usuario["perfil"] == "admin" else paginas_do_perfil(usuario["perfil"])
                 )
+                session["sessoes_permitidas"] = (
+                    [] if usuario["perfil"] == "admin" else sessoes_do_perfil(usuario["perfil"])
+                )
                 db.execute(
                     "UPDATE usuarios SET ultimo_login = NOW() WHERE id = %s",
                     (usuario["id"],)
@@ -1587,6 +1638,11 @@ def register_routes(app):
     def unidade():
         return render_template("unidade.html", active_page="unidade")
 
+    @app.route("/nac")
+    @login_required
+    def nac():
+        return render_template("nac.html", active_page="nac")
+
     @app.route("/usuarios")
     @login_required
     @perfil_required("admin")
@@ -1600,7 +1656,10 @@ def register_routes(app):
     @login_required
     @perfil_required("admin")
     def perfis():
-        return render_template("perfis.html", paginas_disponiveis=PAGINAS_SELECIONAVEIS, active_page="perfis")
+        return render_template(
+            "perfis.html", paginas_disponiveis=PAGINAS_SELECIONAVEIS,
+            sessoes_disponiveis=SESSOES_SELECIONAVEIS, active_page="perfis"
+        )
 
     @app.route("/pendencias")
     @login_required
@@ -1854,7 +1913,10 @@ def register_routes(app):
                     AS auditoria_analisado_usuario_nome,
                 (SELECT u.nome FROM movimentacoes m JOIN usuarios u ON u.id = m.usuario_id
                     WHERE m.prontuario_id = p.id AND m.destino = 'finalizado'
-                    ORDER BY m.data_movimentacao DESC LIMIT 1) AS finalizado_usuario_nome
+                    ORDER BY m.data_movimentacao DESC LIMIT 1) AS finalizado_usuario_nome,
+                (SELECT u.nome FROM movimentacoes m JOIN usuarios u ON u.id = m.usuario_id
+                    WHERE m.prontuario_id = p.id AND m.destino = 'nac'
+                    ORDER BY m.data_movimentacao DESC LIMIT 1) AS nac_usuario_nome
             FROM prontuarios p
             WHERE 1=1
         """
@@ -1954,7 +2016,7 @@ def register_routes(app):
         # Regra de negocio: so pode ir para "contas_medicas" ou alem quando nao
         # houver pendencia cadastrada, ou todas estiverem confirmadas pelo SOP
         # (uma pendencia "resolvida" pela unidade ainda aguarda confirmacao).
-        if destino in ("contas_medicas", "pronto_faturamento", "auditoria", "finalizado"):
+        if destino in ("contas_medicas", "pronto_faturamento", "auditoria", "finalizado", "nac"):
             abertas = db.query(
                 "SELECT COUNT(*) AS total FROM pendencias WHERE prontuario_id = %s AND status != 'confirmada'",
                 (prontuario_id,), fetchone=True
@@ -1988,6 +2050,12 @@ def register_routes(app):
             db.execute(
                 "UPDATE prontuarios SET status_atual = %s, unidade_id = %s, recebido_unidade_em = NULL WHERE id = %s",
                 (destino, unidade_envio, prontuario_id)
+            )
+        elif destino == "nac":
+            # Arquivamento (Contas Medicas -> NAC): exige nova confirmacao de entrega.
+            db.execute(
+                "UPDATE prontuarios SET status_atual = %s, recebido_nac_em = NULL WHERE id = %s",
+                (destino, prontuario_id)
             )
         elif destino == "sop" and atual["status_atual"] in ("unidade", "contas_medicas"):
             # Devolvido ao SOP pela Unidade ou por Contas Medicas: fica em
@@ -2142,6 +2210,24 @@ def register_routes(app):
 
         db.execute(
             "UPDATE prontuarios SET recebido_unidade_em = NOW() WHERE id = %s",
+            (prontuario_id,)
+        )
+        atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
+        return jsonify(atualizado)
+
+    @app.route("/api/prontuarios/<int:prontuario_id>/confirmar-recebimento-nac", methods=["POST"])
+    @login_required
+    def api_confirmar_recebimento_nac(prontuario_id):
+        atual, erro = obter_prontuario_autorizado(prontuario_id)
+        if erro:
+            return erro
+        if atual["status_atual"] != "nac":
+            return jsonify({"erro": "prontuario nao esta aguardando recebimento no NAC"}), 400
+        if atual["recebido_nac_em"]:
+            return jsonify({"erro": "entrega deste prontuario ja foi confirmada"}), 409
+
+        db.execute(
+            "UPDATE prontuarios SET recebido_nac_em = NOW() WHERE id = %s",
             (prontuario_id,)
         )
         atualizado = db.query("SELECT * FROM prontuarios WHERE id = %s", (prontuario_id,), fetchone=True)
@@ -3142,7 +3228,11 @@ def register_routes(app):
         paginas = db.query(
             "SELECT pagina FROM perfil_paginas WHERE perfil_id = %s ORDER BY pagina", (perfil_row["id"],)
         )
-        return {**perfil_row, "paginas": [p["pagina"] for p in paginas]}
+        sessoes = db.query(
+            "SELECT sessao FROM perfil_sessoes WHERE perfil_id = %s ORDER BY sessao", (perfil_row["id"],)
+        )
+        return {**perfil_row, "paginas": [p["pagina"] for p in paginas],
+                "sessoes": [s["sessao"] for s in sessoes]}
 
     @app.route("/api/perfis", methods=["GET"])
     @login_required
@@ -3158,6 +3248,7 @@ def register_routes(app):
         data = v.corpo_json()
         nome = (v.texto(data.get("nome"), "nome", 30) or "").lower().replace(" ", "_")
         paginas = v.lista_textos(data.get("paginas"), "paginas", dict(PAGINAS_SELECIONAVEIS))
+        sessoes = v.lista_textos(data.get("sessoes"), "sessoes", SESSOES_VALIDAS)
 
         if not nome:
             return jsonify({"erro": "nome e obrigatorio"}), 400
@@ -3178,6 +3269,10 @@ def register_routes(app):
             db.execute(
                 "INSERT INTO perfil_paginas (perfil_id, pagina) VALUES (%s, %s)", (novo["id"], pagina)
             )
+        for sessao in sessoes:
+            db.execute(
+                "INSERT INTO perfil_sessoes (perfil_id, sessao) VALUES (%s, %s)", (novo["id"], sessao)
+            )
         return jsonify(serializar_perfil(novo)), 201
 
     @app.route("/api/perfis/<int:perfil_id>", methods=["PUT"])
@@ -3193,12 +3288,18 @@ def register_routes(app):
         data = v.corpo_json()
         ativo = v.booleano(data.get("ativo"), "ativo", atual["ativo"])
         paginas = v.lista_textos(data.get("paginas"), "paginas", dict(PAGINAS_SELECIONAVEIS))
+        sessoes = v.lista_textos(data.get("sessoes"), "sessoes", SESSOES_VALIDAS)
 
         db.execute("UPDATE perfis SET ativo = %s WHERE id = %s", (ativo, perfil_id))
         db.execute("DELETE FROM perfil_paginas WHERE perfil_id = %s", (perfil_id,))
         for pagina in paginas:
             db.execute(
                 "INSERT INTO perfil_paginas (perfil_id, pagina) VALUES (%s, %s)", (perfil_id, pagina)
+            )
+        db.execute("DELETE FROM perfil_sessoes WHERE perfil_id = %s", (perfil_id,))
+        for sessao in sessoes:
+            db.execute(
+                "INSERT INTO perfil_sessoes (perfil_id, sessao) VALUES (%s, %s)", (perfil_id, sessao)
             )
 
         atualizado = db.query("SELECT * FROM perfis WHERE id = %s", (perfil_id,), fetchone=True)
@@ -3340,12 +3441,15 @@ def register_routes(app):
     def inject_globals():
         if session.get("perfil") == "admin":
             paginas_permitidas = [chave for chave, _ in PAGINAS_SELECIONAVEIS]
+            sessoes_permitidas = [chave for lista in SESSOES_SELECIONAVEIS.values() for chave, _ in lista]
         else:
             paginas_permitidas = session.get("paginas_permitidas") or []
+            sessoes_permitidas = sessoes_efetivas_permitidas(session.get("sessoes_permitidas") or [])
         return {
             "usuario_nome": session.get("nome"),
             "usuario_perfil": session.get("perfil"),
             "paginas_permitidas": paginas_permitidas,
+            "sessoes_permitidas": sessoes_permitidas,
             "status_label": STATUS_LABEL,
             "ambiente_homolog": os.environ.get("AMBIENTE", "").strip().lower() == "homolog",
             "url_homologacao": _url_homologacao(),

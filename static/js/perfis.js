@@ -21,14 +21,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const form = ev.target;
     const id = form.querySelector('[name="id"]').value;
     const paginas = Array.from(form.querySelectorAll('input[name="paginas"]:checked')).map((el) => el.value);
+    const sessoes = Array.from(form.querySelectorAll('input[name="sessoes"]:checked')).map((el) => el.value);
 
     try {
       if (id) {
         const ativo = form.querySelector('[name="ativo"]').checked;
-        await apiFetch(`/api/perfis/${id}`, { method: "PUT", body: JSON.stringify({ paginas, ativo }) });
+        await apiFetch(`/api/perfis/${id}`, { method: "PUT", body: JSON.stringify({ paginas, sessoes, ativo }) });
       } else {
         const nome = form.querySelector('[name="nome"]').value.trim();
-        await apiFetch("/api/perfis", { method: "POST", body: JSON.stringify({ nome, paginas }) });
+        await apiFetch("/api/perfis", { method: "POST", body: JSON.stringify({ nome, paginas, sessoes }) });
       }
       fecharModal("modal-perfil");
       carregar();
@@ -74,6 +75,9 @@ function editarPerfil(perfil) {
 
   form.querySelectorAll('input[name="paginas"]').forEach((el) => {
     el.checked = perfil.paginas.includes(el.value);
+  });
+  form.querySelectorAll('input[name="sessoes"]').forEach((el) => {
+    el.checked = perfil.sessoes.includes(el.value);
   });
 
   document.getElementById("campo-ativo-perfil").style.display = "block";
